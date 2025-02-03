@@ -78,6 +78,8 @@
 .if \ret
 	/* Save the structure pointer as RSI is about to be clobbered */
 	pushq	%rsi
+	/* Save RBP as old TDX modules trample over it */
+	pushq	%rbp
 .endif
 
 	movq	TDX_MODULE_rdi(%rsi), %rdi
@@ -106,6 +108,8 @@
 
 .if \ret
 .if \saved
+	popq	%rbp		/* pop trampled RBP */
+
 	/*
 	 * Restore the structure from stack to save the output registers
 	 *
@@ -209,6 +213,7 @@
 
 .Lseamcall_fail\@:
 .if \ret && \saved
+	popq	%rbp		/* pop trampled RBP */
 	/* pop the unused structure pointer back to RSI */
 	popq %rsi
 .endif
