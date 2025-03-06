@@ -231,13 +231,13 @@ Summary: The Linux kernel
 # tools
 %define with_tools     %{?_without_tools:     0} %{?!_without_tools:     1}
 # ynl
-%define with_ynl      %{?_without_ynl:      0} %{?!_without_ynl:      1}
+%define with_ynl      0
 # kernel-debuginfo
 %define with_debuginfo %{?_without_debuginfo: 0} %{?!_without_debuginfo: 1}
 # kernel-abi-stablelists
 %define with_kernel_abi_stablelists %{?_without_kernel_abi_stablelists: 0} %{?!_without_kernel_abi_stablelists: 1}
 # internal samples and selftests
-%define with_selftests %{?_without_selftests: 0} %{?!_without_selftests: 1}
+%define with_selftests 0
 #
 # Additional options for user-friendly one-off kernel building:
 #
