@@ -1347,6 +1347,7 @@ struct kvm_arch {
 	unsigned int indirect_shadow_pages;
 	u8 mmu_valid_gen;
 	u8 vm_type;
+	bool planes_share_fpu;
 	bool has_private_mem;
 	bool has_protected_state;
 	bool pre_fault_allowed;
@@ -2446,5 +2447,7 @@ int memslot_rmap_alloc(struct kvm_memory_slot *slot, unsigned long npages);
  * remaining 31 lower bits must be 0 to preserve ABI.
  */
 #define KVM_EXIT_HYPERCALL_MBZ		GENMASK_ULL(31, 1)
+
+bool kvm_arch_planes_share_fpu(struct kvm *kvm);
 
 #endif /* _ASM_X86_KVM_HOST_H */
