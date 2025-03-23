@@ -1095,9 +1095,22 @@ void __weak kvm_arch_create_vm_debugfs(struct kvm *kvm)
 {
 }
 
+static struct kvm_plane *kvm_create_vm_plane(struct kvm *kvm, unsigned plane_id)
+{
+	struct kvm_plane *plane = kzalloc(sizeof(struct kvm_plane), GFP_KERNEL_ACCOUNT);
+
+	if (!plane)
+		return ERR_PTR(-ENOMEM);
+
+	plane->kvm = kvm;
+	plane->plane = plane_id;
+	return plane;
+}
+
 static struct kvm *kvm_create_vm(unsigned long type, const char *fdname)
 {
 	struct kvm *kvm = kvm_arch_alloc_vm();
+	struct kvm_plane *plane0;
 	struct kvm_memslots *slots;
 	int r, i, j;
 
@@ -1135,6 +1148,13 @@ static struct kvm *kvm_create_vm(unsigned long type, const char *fdname)
 
 	snprintf(kvm->stats_id, sizeof(kvm->stats_id), "kvm-%d",
 		 task_pid_nr(current));
+
+	plane0 = kvm_create_vm_plane(kvm, 0);
+	if (IS_ERR(plane0)) {
+		r = PTR_ERR(plane0);
+		goto out_err_no_plane0;
+	}
+	kvm->planes[0] = plane0;
 
 	r = -ENOMEM;
 	if (init_srcu_struct(&kvm->srcu))
@@ -1227,6 +1247,8 @@ out_err_no_irq_routing:
 out_err_no_irq_srcu:
 	cleanup_srcu_struct(&kvm->srcu);
 out_err_no_srcu:
+	kfree(kvm->planes[0]);
+out_err_no_plane0:
 	kvm_arch_free_vm(kvm);
 	mmdrop(current->mm);
 	return ERR_PTR(r);
@@ -1251,6 +1273,10 @@ static void kvm_destroy_devices(struct kvm *kvm)
 		list_del(&dev->vm_node);
 		dev->ops->destroy(dev);
 	}
+}
+
+static void kvm_destroy_plane(struct kvm_plane *plane)
+{
 }
 
 static void kvm_destroy_vm(struct kvm *kvm)
@@ -1309,6 +1335,11 @@ static void kvm_destroy_vm(struct kvm *kvm)
 #ifdef CONFIG_KVM_GENERIC_MEMORY_ATTRIBUTES
 	xa_destroy(&kvm->mem_attr_array);
 #endif
+	for (i = 0; i < ARRAY_SIZE(kvm->planes); i++) {
+		struct kvm_plane *plane = kvm->planes[i];
+		if (plane)
+			kvm_destroy_plane(plane);
+	}
 	kvm_arch_free_vm(kvm);
 	preempt_notifier_dec();
 	kvm_disable_virtualization();
@@ -4110,6 +4141,7 @@ static int kvm_vm_ioctl_create_vcpu(struct kvm *kvm, unsigned long id)
 	}
 	vcpu->run = page_address(page);
 
+	vcpu->plane0 = vcpu;
 	kvm_vcpu_init(vcpu, kvm, id);
 
 	r = kvm_arch_vcpu_create(vcpu);
