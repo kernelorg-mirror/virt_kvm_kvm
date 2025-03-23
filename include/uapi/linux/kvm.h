@@ -135,6 +135,16 @@ struct kvm_xen_exit {
 	} u;
 };
 
+struct kvm_plane_event_exit {
+#define KVM_PLANE_EVENT_INTERRUPT    1
+	__u16 cause;
+	__u16 pending_event_planes;
+	__u16 target;
+	__u16 padding;
+	__u32 flags;
+	__u64 extra[8];
+};
+
 struct kvm_tdx_exit {
 #define KVM_EXIT_TDX_VMCALL     1
         __u32 type;
@@ -262,7 +272,8 @@ struct kvm_tdx_exit {
 #define KVM_EXIT_NOTIFY           37
 #define KVM_EXIT_LOONGARCH_IOCSR  38
 #define KVM_EXIT_MEMORY_FAULT     39
-#define KVM_EXIT_TDX              40
+#define KVM_EXIT_PLANE_EVENT      40
+#define KVM_EXIT_TDX              41
 
 /* For KVM_EXIT_INTERNAL_ERROR */
 /* Emulate instruction failed. */
@@ -295,7 +306,13 @@ struct kvm_run {
 	/* in */
 	__u8 request_interrupt_window;
 	__u8 HINT_UNSAFE_IN_KVM(immediate_exit);
-	__u8 padding1[6];
+
+	/* in/out */
+	__u8 plane;
+	__u16 suspended_planes;
+
+	/* in */
+	__u16 req_exit_planes;
 
 	/* out */
 	__u32 exit_reason;
@@ -532,6 +549,8 @@ struct kvm_run {
 			__u64 gpa;
 			__u64 size;
 		} memory_fault;
+		/* KVM_EXIT_PLANE_EVENT */
+		struct kvm_plane_event_exit plane_event;
 		/* KVM_EXIT_TDX */
 		struct kvm_tdx_exit tdx;
 		/* Fix the size of the union. */
@@ -1017,6 +1036,8 @@ struct kvm_enable_cap {
 #define KVM_CAP_PRE_FAULT_MEMORY 236
 #define KVM_CAP_X86_APIC_BUS_CYCLES_NS 237
 #define KVM_CAP_X86_GUEST_MODE 238
+#define KVM_CAP_PLANES 239
+#define KVM_CAP_PLANES_FPU 240
 
 struct kvm_irq_routing_irqchip {
 	__u32 irqchip;
