@@ -1311,6 +1311,39 @@ bool kvm_intr_is_single_vcpu_fast(struct kvm *kvm, struct kvm_lapic_irq *irq,
 	return ret;
 }
 
+static void kvm_lapic_deliver_interrupt(struct kvm_vcpu *vcpu, struct kvm_lapic *apic,
+					int delivery_mode, int trig_mode, int vector)
+{
+	struct kvm_vcpu *plane0_vcpu = vcpu->plane0;
+	struct kvm_plane *running_plane;
+	u16 req_exit_planes;
+
+	kvm_x86_call(deliver_interrupt)(apic, delivery_mode, trig_mode, vector);
+
+	/*
+	 * test_and_set_bit implies a memory barrier, so IRR is written before
+	 * reading irr_pending_planes below...
+	 */
+	if (!test_and_set_bit(vcpu->plane, &plane0_vcpu->arch.irr_pending_planes)) {
+		/*
+		 * ... and also running_plane and req_exit_planes are read after writing
+		 * irr_pending_planes.  Both barriers pair with kvm_arch_vcpu_ioctl_run().
+		 */
+		smp_mb__after_atomic();
+
+		running_plane = READ_ONCE(plane0_vcpu->running_plane);
+		if (!running_plane)
+			return;
+
+		req_exit_planes = READ_ONCE(plane0_vcpu->req_exit_planes);
+		if (!(req_exit_planes & BIT(vcpu->plane)))
+			return;
+
+		kvm_make_request(KVM_REQ_PLANE_INTERRUPT,
+				 kvm_get_plane_vcpu(running_plane, vcpu->vcpu_id));
+	}
+}
+
 /*
  * Add a pending IRQ into lapic.
  * Return 1 if successfully added and 0 if discarded.
@@ -1352,8 +1385,7 @@ static int __apic_accept_irq(struct kvm_lapic *apic, int delivery_mode,
 						       apic->regs + APIC_TMR);
 		}
 
-		kvm_x86_call(deliver_interrupt)(apic, delivery_mode,
-						trig_mode, vector);
+		kvm_lapic_deliver_interrupt(vcpu, apic, delivery_mode, trig_mode, vector);
 		break;
 
 	case APIC_DM_REMRD:

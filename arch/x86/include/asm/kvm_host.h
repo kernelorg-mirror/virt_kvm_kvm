@@ -125,6 +125,7 @@
 #define KVM_REQ_HV_TLB_FLUSH \
 	KVM_ARCH_REQ_FLAGS(32, KVM_REQUEST_WAIT | KVM_REQUEST_NO_WAKEUP)
 #define KVM_REQ_UPDATE_PROTECTED_GUEST_STATE	KVM_ARCH_REQ(34)
+#define KVM_REQ_PLANE_INTERRUPT		KVM_ARCH_REQ(35)
 
 #define CR0_RESERVED_BITS                                               \
 	(~(unsigned long)(X86_CR0_PE | X86_CR0_MP | X86_CR0_EM | X86_CR0_TS \
@@ -863,6 +864,12 @@ struct kvm_vcpu_arch {
 
 	u64 xcr0;
 	u64 guest_supported_xcr0;
+
+	/*
+	 * Only valid in plane0.  The bitmask of planes that received
+	 * an interrupt, to be checked against req_exit_planes.
+	 */
+	atomic_t irr_pending_planes;
 
 	struct kvm_pio_request pio;
 	void *pio_data;
