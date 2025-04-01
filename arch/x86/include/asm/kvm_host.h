@@ -2339,6 +2339,8 @@ enum {
 # define kvm_memslots_for_spte_role(kvm, role) __kvm_memslots(kvm, 0)
 #endif
 
+#define KVM_MAX_VCPU_PLANES	16
+
 int kvm_cpu_has_injectable_intr(struct kvm_vcpu *v);
 int kvm_cpu_has_interrupt(struct kvm_vcpu *vcpu);
 int kvm_cpu_has_extint(struct kvm_vcpu *v);
@@ -2455,6 +2457,7 @@ int memslot_rmap_alloc(struct kvm_memory_slot *slot, unsigned long npages);
  */
 #define KVM_EXIT_HYPERCALL_MBZ		GENMASK_ULL(31, 1)
 
+int kvm_arch_nr_vcpu_planes(struct kvm *kvm);
 bool kvm_arch_planes_share_fpu(struct kvm *kvm);
 
 #endif /* _ASM_X86_KVM_HOST_H */
