@@ -7977,7 +7977,6 @@ See Documentation/arch/x86/sgx.rst for more details.
 7.26 KVM_CAP_PPC_RPT_INVALIDATE
 -------------------------------
 
-:Capability: KVM_CAP_PPC_RPT_INVALIDATE
 :Architectures: ppc
 :Type: vm
 
@@ -8052,7 +8051,6 @@ upgrading the VMM process without interrupting the guest.
 7.30 KVM_CAP_PPC_AIL_MODE_3
 -------------------------------
 
-:Capability: KVM_CAP_PPC_AIL_MODE_3
 :Architectures: ppc
 :Type: vm
 
@@ -8066,7 +8064,6 @@ handling interrupts and system calls.
 7.31 KVM_CAP_DISABLE_QUIRKS2
 ----------------------------
 
-:Capability: KVM_CAP_DISABLE_QUIRKS2
 :Parameters: args[0] - set of KVM quirks to disable
 :Architectures: x86
 :Type: vm
@@ -8910,7 +8907,6 @@ leaf.
 8.34 KVM_CAP_EXIT_HYPERCALL
 ---------------------------
 
-:Capability: KVM_CAP_EXIT_HYPERCALL
 :Architectures: x86
 :Type: vm
 
@@ -8929,7 +8925,6 @@ ENOSYS for the others.
 8.35 KVM_CAP_PMU_CAPABILITY
 ---------------------------
 
-:Capability: KVM_CAP_PMU_CAPABILITY
 :Architectures: x86
 :Type: vm
 :Parameters: arg[0] is bitmask of PMU virtualization capabilities.
@@ -8951,7 +8946,6 @@ should adjust CPUID leaf 0xA to reflect that the PMU is disabled.
 8.36 KVM_CAP_ARM_SYSTEM_SUSPEND
 -------------------------------
 
-:Capability: KVM_CAP_ARM_SYSTEM_SUSPEND
 :Architectures: arm64
 :Type: vm
 
@@ -8961,7 +8955,6 @@ type KVM_SYSTEM_EVENT_SUSPEND to process the guest suspend request.
 8.37 KVM_CAP_S390_PROTECTED_DUMP
 --------------------------------
 
-:Capability: KVM_CAP_S390_PROTECTED_DUMP
 :Architectures: s390
 :Type: vm
 
@@ -8974,7 +8967,6 @@ available and supports the `KVM_PV_DUMP_CPU` subcommand.
 8.38 KVM_CAP_VM_DISABLE_NX_HUGE_PAGES
 -------------------------------------
 
-:Capability: KVM_CAP_VM_DISABLE_NX_HUGE_PAGES
 :Architectures: x86
 :Type: vm
 :Parameters: arg[0] must be 0.
@@ -8991,7 +8983,6 @@ This capability may only be set before any vCPUs are created.
 8.39 KVM_CAP_S390_CPU_TOPOLOGY
 ------------------------------
 
-:Capability: KVM_CAP_S390_CPU_TOPOLOGY
 :Architectures: s390
 :Type: vm
 
@@ -9016,7 +9007,6 @@ must point to a byte where the value will be stored or retrieved from.
 8.40 KVM_CAP_ARM_EAGER_SPLIT_CHUNK_SIZE
 ---------------------------------------
 
-:Capability: KVM_CAP_ARM_EAGER_SPLIT_CHUNK_SIZE
 :Architectures: arm64
 :Type: vm
 :Parameters: arg[0] is the new split chunk size.
@@ -9043,7 +9033,6 @@ block sizes is exposed in KVM_CAP_ARM_SUPPORTED_BLOCK_SIZES as a
 8.41 KVM_CAP_VM_TYPES
 ---------------------
 
-:Capability: KVM_CAP_MEMORY_ATTRIBUTES
 :Architectures: x86
 :Type: system ioctl
 
