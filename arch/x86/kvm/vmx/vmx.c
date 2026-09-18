@@ -5418,10 +5418,14 @@ static int vmx_handle_page_fault(struct kvm_vcpu *vcpu, u32 error_code)
 		WARN_ON_ONCE(!IS_ENABLED(CONFIG_X86_SGX_KVM) ||
 			     !cpu_feature_enabled(X86_FEATURE_SGX2));
 
-		if (guest_cpu_cap_has(vcpu, X86_FEATURE_SGX2))
-			kvm_fixup_and_inject_pf_error(vcpu, cr2, error_code);
-		else
+		if (guest_cpu_cap_has(vcpu, X86_FEATURE_SGX2)) {
+			int r = kvm_fixup_and_inject_pf_error(vcpu, cr2, error_code);
+
+			if (r)
+				return r;
+		} else {
 			kvm_inject_gp(vcpu, 0);
+		}
 		return 1;
 	}
 
@@ -5431,7 +5435,10 @@ static int vmx_handle_page_fault(struct kvm_vcpu *vcpu, u32 error_code)
 	 * to the GPA being legal with respect to host.MAXPHYADDR).
 	 */
 	if (enable_ept) {
-		kvm_fixup_and_inject_pf_error(vcpu, cr2, error_code);
+		int r = kvm_fixup_and_inject_pf_error(vcpu, cr2, error_code);
+
+		if (r)
+			return r;
 		return 1;
 	}
 
