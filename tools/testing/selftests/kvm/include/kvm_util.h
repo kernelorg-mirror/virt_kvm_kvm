@@ -473,17 +473,27 @@ static inline void vm_enable_cap(struct kvm_vm *vm, u32 cap, u64 arg0)
 int kvm_gpa_to_guest_memfd(struct kvm_vm *vm, gpa_t gpa, off_t *fd_offset,
 			   size_t *nr_bytes);
 
-static inline void vm_set_memory_attributes(struct kvm_vm *vm, gpa_t gpa,
-					    size_t size, u64 attributes)
+static inline int __vm_set_memory_attributes(struct kvm_vm *vm, u64 gpa,
+					     u64 size, u64 attributes,
+					     u64 flags)
 {
 	struct kvm_memory_attributes attr = {
 		.attributes = attributes,
 		.address = gpa,
 		.size = size,
-		.flags = 0,
+		.flags = flags,
 	};
 
-	vm_ioctl(vm, KVM_SET_MEMORY_ATTRIBUTES, &attr);
+	return __vm_ioctl(vm, KVM_SET_MEMORY_ATTRIBUTES, &attr);
+}
+
+static inline void vm_set_memory_attributes(struct kvm_vm *vm, gpa_t gpa,
+					    u64 size, u64 attributes)
+{
+	int rc;
+
+	rc = __vm_set_memory_attributes(vm, gpa, size, attributes, 0);
+	TEST_ASSERT_VM_VCPU_IOCTL(!rc, KVM_SET_MEMORY_ATTRIBUTES, rc, vm);
 }
 
 static inline int __gmem_set_memory_attributes(int fd, u64 offset,
