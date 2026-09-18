@@ -185,12 +185,12 @@ static inline bool kvm_mmu_unprotect_gfn_and_retry(struct kvm_vcpu *vcpu,
 void kvm_mmu_free_roots(struct kvm *kvm, struct kvm_mmu *mmu,
 			ulong roots_to_free);
 void kvm_mmu_free_guest_mode_roots(struct kvm *kvm, struct kvm_mmu *mmu);
-gpa_t kvm_mmu_gva_to_gpa_read(struct kvm_vcpu *vcpu, gva_t gva,
+int kvm_mmu_gva_to_gpa_read(struct kvm_vcpu *vcpu, gva_t gva, gpa_t *gpa,
+			    struct x86_exception *exception);
+int kvm_mmu_gva_to_gpa_write(struct kvm_vcpu *vcpu, gva_t gva, gpa_t *gpa,
+			     struct x86_exception *exception);
+int kvm_mmu_gva_to_gpa_system(struct kvm_vcpu *vcpu, gva_t gva, gpa_t *gpa,
 			      struct x86_exception *exception);
-gpa_t kvm_mmu_gva_to_gpa_write(struct kvm_vcpu *vcpu, gva_t gva,
-			       struct x86_exception *exception);
-gpa_t kvm_mmu_gva_to_gpa_system(struct kvm_vcpu *vcpu, gva_t gva,
-				struct x86_exception *exception);
 
 static inline int kvm_mmu_reload(struct kvm_vcpu *vcpu)
 {

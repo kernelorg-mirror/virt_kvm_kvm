@@ -3003,7 +3003,7 @@ bool __kvm_mmu_unprotect_gfn_and_retry(struct kvm_vcpu *vcpu, gpa_t cr2_or_gpa,
 		goto out;
 
 	if (!vcpu->arch.mmu->root_role.direct) {
-		gpa = kvm_mmu_gva_to_gpa_write(vcpu, cr2_or_gpa, NULL);
+		kvm_mmu_gva_to_gpa_write(vcpu, cr2_or_gpa, &gpa, NULL);
 		if (gpa == INVALID_GPA)
 			goto out;
 	}
@@ -4472,9 +4472,9 @@ void kvm_mmu_sync_prev_roots(struct kvm_vcpu *vcpu)
 	kvm_mmu_free_roots(vcpu->kvm, vcpu->arch.mmu, roots_to_free);
 }
 
-static gpa_t nonpaging_gva_to_gpa(struct kvm_vcpu *vcpu, struct kvm_pagewalk *w,
-				  gpa_t vaddr, u64 access,
-				  struct x86_exception *exception)
+static int nonpaging_gva_to_gpa(struct kvm_vcpu *vcpu, struct kvm_pagewalk *w,
+				gpa_t vaddr, u64 access, gpa_t *gpa,
+				struct x86_exception *exception)
 {
 	if (exception)
 		exception->error_code = 0;
@@ -4484,8 +4484,9 @@ static gpa_t nonpaging_gva_to_gpa(struct kvm_vcpu *vcpu, struct kvm_pagewalk *w,
 	 * user-mode address if CR0.PG=0.  Therefore *include* ACC_USER_MASK in
 	 * the last argument to kvm_translate_gpa (which NPT does not use).
 	 */
-	return kvm_translate_gpa(vcpu, w, vaddr, access | PFERR_GUEST_FINAL_MASK,
+	*gpa = kvm_translate_gpa(vcpu, w, vaddr, access | PFERR_GUEST_FINAL_MASK,
 				 exception, ACC_ALL);
+	return 0;
 }
 
 static bool mmio_info_in_cache(struct kvm_vcpu *vcpu, u64 addr, bool direct)

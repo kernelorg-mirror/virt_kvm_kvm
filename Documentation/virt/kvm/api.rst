@@ -521,7 +521,9 @@ data structures.
 :Architectures: x86
 :Type: vcpu ioctl
 :Parameters: struct kvm_translation (in/out)
-:Returns: 0 on success, -1 on error
+:Returns: 0 on success, -1 on error.  errno is EFAULT if
+          the parameter is invalid but also if guest memory
+          could not be accessed
 
 Translates a virtual address according to the vcpu's current address
 translation mode.

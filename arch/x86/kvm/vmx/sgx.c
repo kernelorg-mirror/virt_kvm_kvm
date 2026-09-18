@@ -76,11 +76,14 @@ static int sgx_gva_to_gpa(struct kvm_vcpu *vcpu, gva_t gva, bool write,
 			  gpa_t *gpa)
 {
 	struct x86_exception ex;
+	int r;
 
 	if (write)
-		*gpa = kvm_mmu_gva_to_gpa_write(vcpu, gva, &ex);
+		r = kvm_mmu_gva_to_gpa_write(vcpu, gva, gpa, &ex);
 	else
-		*gpa = kvm_mmu_gva_to_gpa_read(vcpu, gva, &ex);
+		r = kvm_mmu_gva_to_gpa_read(vcpu, gva, gpa, &ex);
+	if (r)
+		return r;
 
 	if (*gpa == INVALID_GPA) {
 		kvm_inject_emulated_page_fault(vcpu, &ex);

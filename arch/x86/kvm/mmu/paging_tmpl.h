@@ -910,13 +910,14 @@ static gpa_t FNAME(get_level1_sp_gpa)(struct kvm_mmu_page *sp)
 }
 
 /* Note, @addr is a GPA when gva_to_gpa() translates an L2 GPA to an L1 GPA. */
-static gpa_t FNAME(gva_to_gpa)(struct kvm_vcpu *vcpu, struct kvm_pagewalk *w,
-			       gpa_t addr, u64 access,
-			       struct x86_exception *exception)
+static int FNAME(gva_to_gpa)(struct kvm_vcpu *vcpu, struct kvm_pagewalk *w,
+			     gpa_t addr, u64 access, gpa_t *gpa,
+			     struct x86_exception *exception)
 {
 	struct guest_walker walker;
-	gpa_t gpa = INVALID_GPA;
 	int r;
+
+	*gpa = INVALID_GPA;
 
 #ifndef CONFIG_X86_64
 	/* A 64-bit GVA should be impossible on 32-bit KVM. */
@@ -926,12 +927,12 @@ static gpa_t FNAME(gva_to_gpa)(struct kvm_vcpu *vcpu, struct kvm_pagewalk *w,
 	r = FNAME(walk_addr_generic)(&walker, vcpu, w, addr, access);
 
 	if (r) {
-		gpa = gfn_to_gpa(walker.gfn);
-		gpa |= addr & ~PAGE_MASK;
+		*gpa = gfn_to_gpa(walker.gfn);
+		*gpa |= addr & ~PAGE_MASK;
 	} else if (exception)
 		*exception = walker.fault;
 
-	return gpa;
+	return 0;
 }
 
 /*

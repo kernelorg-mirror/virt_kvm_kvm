@@ -2164,6 +2164,7 @@ static gpa_t svm_translate_nested_gpa(struct kvm_vcpu *vcpu, gpa_t gpa,
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
 	struct kvm_pagewalk *w = &vcpu->arch.ngpa_walk;
+	gpa_t result;
 
 	if (WARN_ON_ONCE(!mmu_is_nested(vcpu)))
 		return gpa;
@@ -2172,7 +2173,8 @@ static gpa_t svm_translate_nested_gpa(struct kvm_vcpu *vcpu, gpa_t gpa,
 	if (!(svm->nested.ctl.misc_ctl & SVM_MISC_ENABLE_GMET))
 		access |= PFERR_USER_MASK;
 
-	return w->gva_to_gpa(vcpu, w, gpa, access, exception);
+	w->gva_to_gpa(vcpu, w, gpa, access, &result, exception);
+	return result;
 }
 
 struct kvm_x86_nested_ops svm_nested_ops __initdata = {

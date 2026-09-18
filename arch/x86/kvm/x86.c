@@ -4829,34 +4829,34 @@ static int vcpu_mmio_read(struct kvm_vcpu *vcpu, gpa_t addr, int len, void *v)
 	return handled;
 }
 
-gpa_t kvm_mmu_gva_to_gpa_read(struct kvm_vcpu *vcpu, gva_t gva,
-			      struct x86_exception *exception)
+int kvm_mmu_gva_to_gpa_read(struct kvm_vcpu *vcpu, gva_t gva, gpa_t *gpa,
+			    struct x86_exception *exception)
 {
 	struct kvm_pagewalk *gva_walk = &vcpu->arch.gva_walk;
 
 	u64 access = (kvm_x86_call(get_cpl)(vcpu) == 3) ? PFERR_USER_MASK : 0;
-	return gva_walk->gva_to_gpa(vcpu, gva_walk, gva, access, exception);
+	return gva_walk->gva_to_gpa(vcpu, gva_walk, gva, access, gpa, exception);
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_mmu_gva_to_gpa_read);
 
-gpa_t kvm_mmu_gva_to_gpa_write(struct kvm_vcpu *vcpu, gva_t gva,
-			       struct x86_exception *exception)
+int kvm_mmu_gva_to_gpa_write(struct kvm_vcpu *vcpu, gva_t gva, gpa_t *gpa,
+			     struct x86_exception *exception)
 {
 	struct kvm_pagewalk *gva_walk = &vcpu->arch.gva_walk;
 
 	u64 access = (kvm_x86_call(get_cpl)(vcpu) == 3) ? PFERR_USER_MASK : 0;
 	access |= PFERR_WRITE_MASK;
-	return gva_walk->gva_to_gpa(vcpu, gva_walk, gva, access, exception);
+	return gva_walk->gva_to_gpa(vcpu, gva_walk, gva, access, gpa, exception);
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_mmu_gva_to_gpa_write);
 
 /* uses this to access any guest's mapped memory without checking CPL */
-gpa_t kvm_mmu_gva_to_gpa_system(struct kvm_vcpu *vcpu, gva_t gva,
-				struct x86_exception *exception)
+int kvm_mmu_gva_to_gpa_system(struct kvm_vcpu *vcpu, gva_t gva, gpa_t *gpa,
+			      struct x86_exception *exception)
 {
 	struct kvm_pagewalk *gva_walk = &vcpu->arch.gva_walk;
 
-	return gva_walk->gva_to_gpa(vcpu, gva_walk, gva, 0, exception);
+	return gva_walk->gva_to_gpa(vcpu, gva_walk, gva, 0, gpa, exception);
 }
 
 static int kvm_read_guest_virt_helper(gva_t addr, void *val, unsigned int bytes,
@@ -4867,11 +4867,14 @@ static int kvm_read_guest_virt_helper(gva_t addr, void *val, unsigned int bytes,
 	void *data = val;
 
 	while (bytes) {
-		gpa_t gpa = gva_walk->gva_to_gpa(vcpu, gva_walk, addr, access, exception);
+		gpa_t gpa;
 		unsigned offset = addr & (PAGE_SIZE-1);
 		unsigned toread = min(bytes, (unsigned)PAGE_SIZE - offset);
 		int ret;
 
+		ret = gva_walk->gva_to_gpa(vcpu, gva_walk, addr, access, &gpa, exception);
+		if (ret == -EFAULT)
+			return X86EMUL_MEMORY_FAULT;
 		if (gpa == INVALID_GPA)
 			return X86EMUL_PROPAGATE_FAULT;
 		ret = kvm_vcpu_read_guest_page(vcpu, gpa >> PAGE_SHIFT, data,
@@ -4901,8 +4904,12 @@ static int kvm_fetch_guest_virt(struct x86_emulate_ctxt *ctxt,
 	int ret;
 
 	/* Inline kvm_read_guest_virt_helper for speed.  */
-	gpa_t gpa = gva_walk->gva_to_gpa(vcpu, gva_walk, addr, access|PFERR_FETCH_MASK,
-					  exception);
+	gpa_t gpa;
+
+	ret = gva_walk->gva_to_gpa(vcpu, gva_walk, addr, access | PFERR_FETCH_MASK,
+				   &gpa, exception);
+	if (unlikely(ret == -EFAULT))
+		return X86EMUL_MEMORY_FAULT;
 	if (unlikely(gpa == INVALID_GPA))
 		return X86EMUL_PROPAGATE_FAULT;
 
@@ -4966,11 +4973,14 @@ static int kvm_write_guest_virt_helper(gva_t addr, void *val, unsigned int bytes
 	void *data = val;
 
 	while (bytes) {
-		gpa_t gpa = gva_walk->gva_to_gpa(vcpu, gva_walk, addr, access, exception);
+		gpa_t gpa;
 		unsigned offset = addr & (PAGE_SIZE-1);
 		unsigned towrite = min(bytes, (unsigned)PAGE_SIZE - offset);
 		int ret;
 
+		ret = gva_walk->gva_to_gpa(vcpu, gva_walk, addr, access, &gpa, exception);
+		if (ret == -EFAULT)
+			return X86EMUL_MEMORY_FAULT;
 		if (gpa == INVALID_GPA)
 			return X86EMUL_PROPAGATE_FAULT;
 		ret = kvm_vcpu_write_guest(vcpu, gpa, data, towrite);
@@ -5085,7 +5095,8 @@ static int vcpu_mmio_gva_to_gpa(struct kvm_vcpu *vcpu, unsigned long gva,
 		return 1;
 	}
 
-	*gpa = gva_walk->gva_to_gpa(vcpu, gva_walk, gva, access, exception);
+	if (gva_walk->gva_to_gpa(vcpu, gva_walk, gva, access, gpa, exception))
+		return -EFAULT;
 
 	if (*gpa == INVALID_GPA)
 		return -1;
@@ -5332,7 +5343,9 @@ static int emulator_cmpxchg_emulated(struct x86_emulate_ctxt *ctxt,
 	if (bytes > 8 || (bytes & (bytes - 1)))
 		goto emul_write;
 
-	gpa = kvm_mmu_gva_to_gpa_write(vcpu, addr, NULL);
+	r = kvm_mmu_gva_to_gpa_write(vcpu, addr, &gpa, NULL);
+	if (r == -EFAULT)
+		return X86EMUL_MEMORY_FAULT;
 
 	if (gpa == INVALID_GPA ||
 	    (gpa & PAGE_MASK) == APIC_DEFAULT_PHYS_BASE)
@@ -9343,19 +9356,24 @@ int kvm_arch_vcpu_ioctl_translate(struct kvm_vcpu *vcpu,
 {
 	unsigned long vaddr = tr->linear_address;
 	gpa_t gpa;
-	int idx;
+	int idx, r;
 
 	vcpu_load(vcpu);
-
 	idx = srcu_read_lock(&vcpu->kvm->srcu);
-	gpa = kvm_mmu_gva_to_gpa_system(vcpu, vaddr, NULL);
+	r = kvm_mmu_gva_to_gpa_system(vcpu, vaddr, &gpa, NULL);
 	srcu_read_unlock(&vcpu->kvm->srcu, idx);
+	vcpu_put(vcpu);
+
+	if (r) {
+		if (r != -EFAULT)
+			return r;
+		gpa = INVALID_GPA;
+	}
+
 	tr->physical_address = gpa;
 	tr->valid = gpa != INVALID_GPA;
 	tr->writeable = 1;
 	tr->usermode = 0;
-
-	vcpu_put(vcpu);
 	return 0;
 }
 
@@ -10819,11 +10837,15 @@ int kvm_fixup_and_inject_pf_error(struct kvm_vcpu *vcpu, gva_t gva, u16 error_co
 {
 	struct kvm_pagewalk *gva_walk = &vcpu->arch.gva_walk;
 	struct x86_exception fault;
+	gpa_t gpa;
+	int r;
 	u64 access = error_code &
 		(PFERR_WRITE_MASK | PFERR_FETCH_MASK | PFERR_USER_MASK);
 
-	if (!(error_code & PFERR_PRESENT_MASK) ||
-	    gva_walk->gva_to_gpa(vcpu, gva_walk, gva, access, &fault) != INVALID_GPA) {
+	r = gva_walk->gva_to_gpa(vcpu, gva_walk, gva, access, &gpa, &fault);
+	if (r)
+		return r;
+	if (!(error_code & PFERR_PRESENT_MASK) || gpa != INVALID_GPA) {
 		/*
 		 * If gva_walk->gva_to_gpa succeeded, the page
 		 * tables probably do not match the TLB.  Just proceed
