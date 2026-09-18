@@ -2624,6 +2624,7 @@ bool kvm_arch_pre_set_vm_memory_attributes(struct kvm *kvm,
 					   struct kvm_gfn_range *range);
 bool kvm_arch_post_set_vm_memory_attributes(struct kvm *kvm,
 					    struct kvm_gfn_range *range);
+void kvm_arch_post_set_vm_memory_attributes_unlocked(struct kvm *kvm);
 bool kvm_range_has_any_vm_memory_attributes(struct kvm *kvm, gfn_t start, gfn_t end,
 					    unsigned long mask);
 u64 kvm_supported_vm_mem_attributes(struct kvm *kvm);

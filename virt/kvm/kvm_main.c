@@ -2773,6 +2773,7 @@ static int kvm_set_vm_mem_attributes(struct kvm *kvm, gfn_t start, gfn_t end,
 		KVM_MMU_LOCK(kvm);
 		kvm_mmu_invalidate_end(kvm);
 		KVM_MMU_UNLOCK(kvm);
+		kvm_arch_post_set_vm_memory_attributes_unlocked(kvm);
 	}
 
 out_unlock:
