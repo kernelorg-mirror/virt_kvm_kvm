@@ -2630,7 +2630,7 @@ static bool kvm_range_memory_attributes_need_sync(struct kvm *kvm,
 	return kvm_range_has_any_vm_memory_attributes(kvm, start, end, mask);
 }
 
-static __always_inline void kvm_handle_gfn_range(struct kvm *kvm,
+static __always_inline bool kvm_handle_gfn_range(struct kvm *kvm,
 						 struct kvm_mmu_notifier_range *range)
 {
 	struct kvm_gfn_range gfn_range;
@@ -2680,6 +2680,8 @@ static __always_inline void kvm_handle_gfn_range(struct kvm *kvm,
 
 	if (found_memslot)
 		KVM_MMU_UNLOCK(kvm);
+
+	return found_memslot;
 }
 
 static bool kvm_pre_set_vm_memory_attributes(struct kvm *kvm,
@@ -2717,10 +2719,11 @@ static int kvm_set_vm_mem_attributes(struct kvm *kvm, gfn_t start, gfn_t end,
 		.end = end,
 		.arg.attributes = attributes,
 		.handler = kvm_arch_post_set_vm_memory_attributes,
-		.on_lock = kvm_mmu_invalidate_end,
+		.on_lock = (void *)kvm_null_fn,
 		.may_block = true,
 	};
 	bool sync = false;
+	bool found_memslot;
 	unsigned long i;
 	void *entry;
 	int r = 0;
@@ -2752,7 +2755,7 @@ static int kvm_set_vm_mem_attributes(struct kvm *kvm, gfn_t start, gfn_t end,
 		cond_resched();
 	}
 
-	kvm_handle_gfn_range(kvm, &pre_set_range);
+	found_memslot = kvm_handle_gfn_range(kvm, &pre_set_range);
 
 	for (i = start; i < end; i++) {
 		r = xa_err(xa_store(&kvm->mem_attrs.array, i, entry,
@@ -2765,7 +2768,12 @@ static int kvm_set_vm_mem_attributes(struct kvm *kvm, gfn_t start, gfn_t end,
 	smp_store_release(&kvm->mem_attrs.generation,
 			  kvm->mem_attrs.generation + 1);
 
-	kvm_handle_gfn_range(kvm, &post_set_range);
+	if (found_memslot) {
+		kvm_handle_gfn_range(kvm, &post_set_range);
+		KVM_MMU_LOCK(kvm);
+		kvm_mmu_invalidate_end(kvm);
+		KVM_MMU_UNLOCK(kvm);
+	}
 
 out_unlock:
 	mutex_unlock(&kvm->slots_lock);
