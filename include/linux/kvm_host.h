@@ -726,6 +726,15 @@ static inline int kvm_arch_vcpu_memslots_id(struct kvm_vcpu *vcpu)
 }
 #endif
 
+#ifdef kvm_arch_has_memory_protection_attr
+bool kvm_arch_mem_attributes_supported_prot(struct kvm *kvm, unsigned long attrs);
+#else
+static inline bool kvm_arch_has_memory_protection_attr(struct kvm *kvm)
+{
+	return false;
+}
+#endif
+
 #ifndef kvm_arch_has_readonly_mem
 static inline bool kvm_arch_has_readonly_mem(struct kvm *kvm)
 {
@@ -2577,12 +2586,31 @@ static inline bool kvm_memslot_is_gmem_only(const struct kvm_memory_slot *slot)
 	return slot->flags & KVM_MEMSLOT_GMEM_ONLY;
 }
 
+#define KVM_MEMORY_ATTRIBUTE_PROT \
+	(KVM_MEMORY_ATTRIBUTE_NR | KVM_MEMORY_ATTRIBUTE_NW | KVM_MEMORY_ATTRIBUTE_NX)
+
+static inline bool kvm_mem_attributes_may_read(u64 attrs)
+{
+	return !(attrs & KVM_MEMORY_ATTRIBUTE_NR);
+}
+
+static inline bool kvm_mem_attributes_may_write(u64 attrs)
+{
+	return !(attrs & KVM_MEMORY_ATTRIBUTE_NW);
+}
+
+static inline bool kvm_mem_attributes_may_exec(u64 attrs)
+{
+	return !(attrs & KVM_MEMORY_ATTRIBUTE_NX);
+}
+
 #ifdef CONFIG_KVM_VM_MEMORY_ATTRIBUTES
 static inline unsigned long kvm_get_vm_memory_attributes(struct kvm *kvm, gfn_t gfn)
 {
 	return xa_to_value(xa_load(&kvm->mem_attr_array, gfn));
 }
 
+bool kvm_vm_mem_attributes_valid(struct kvm *kvm, unsigned long attrs);
 bool kvm_range_has_vm_memory_attributes(struct kvm *kvm, gfn_t start, gfn_t end,
 					unsigned long mask, unsigned long attrs);
 bool kvm_arch_pre_set_vm_memory_attributes(struct kvm *kvm,

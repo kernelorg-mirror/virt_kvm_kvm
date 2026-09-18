@@ -1882,6 +1882,7 @@ enum kvm_intr_type {
 #define kvm_arch_has_gmem_convert() (!!kvm_x86_ops.gmem_make_private)
 #endif
 
+#define kvm_arch_has_memory_protection_attr(kvm) (!(kvm)->arch.has_private_mem)
 #define kvm_arch_has_readonly_mem(kvm) (!(kvm)->arch.has_protected_state)
 
 #ifdef CONFIG_X86_64
