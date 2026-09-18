@@ -2641,6 +2641,9 @@ static inline u64 kvm_mem_attributes_generation(struct kvm *kvm)
 	 */
 	return smp_load_acquire(&kvm->mem_attrs.generation);
 }
+
+bool kvm_prepare_memory_fault_exit_for_range(struct kvm_vcpu *vcpu, gpa_t gpa,
+					     size_t size, bool write);
 #else
 static inline bool kvm_range_has_any_vm_memory_attributes(struct kvm *kvm,
 			gfn_t start, gfn_t end, unsigned long mask)

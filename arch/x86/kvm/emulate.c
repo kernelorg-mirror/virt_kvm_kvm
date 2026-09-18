@@ -2555,11 +2555,15 @@ static int emulator_io_port_access_allowed(struct x86_emulate_ctxt *ctxt,
 	base |= ((u64)base3) << 32;
 #endif
 	r = ops->read_std(ctxt, base + 102, &io_bitmap_ptr, 2, NULL, true);
+	if (r == X86EMUL_MEMORY_FAULT)
+		return r;
 	if (r != X86EMUL_CONTINUE)
 		return -EACCES;
 	if (io_bitmap_ptr + port/8 > desc_limit_scaled(&tr_seg))
 		return -EACCES;
 	r = ops->read_std(ctxt, base + io_bitmap_ptr + port/8, &perm, 2, NULL, true);
+	if (r == X86EMUL_MEMORY_FAULT)
+		return r;
 	if (r != X86EMUL_CONTINUE)
 		return -EACCES;
 	if ((perm >> bit_idx) & mask)
@@ -2758,7 +2762,10 @@ static int load_state_from_tss32(struct x86_emulate_ctxt *ctxt,
 	int ret;
 	u8 cpl;
 
-	if (ctxt->ops->set_cr(ctxt, 3, tss->cr3))
+	ret = ctxt->ops->set_cr(ctxt, 3, tss->cr3);
+	if (ret == X86EMUL_MEMORY_FAULT)
+		return ret;
+	if (ret)
 		return emulate_gp(ctxt, 0);
 	ctxt->_eip = tss->eip;
 	ctxt->eflags = tss->eflags | 2;
@@ -2993,6 +3000,8 @@ int emulator_task_switch(struct x86_emulate_ctxt *ctxt,
 		ctxt->eip = ctxt->_eip;
 		writeback_registers(ctxt);
 	}
+	if (rc == X86EMUL_MEMORY_FAULT)
+		return EMULATION_MEMORY_FAULT;
 
 	return (rc == X86EMUL_UNHANDLEABLE) ? EMULATION_FAILED : EMULATION_OK;
 }
@@ -3260,7 +3269,10 @@ static int em_cr_write(struct x86_emulate_ctxt *ctxt)
 	int cr_num = ctxt->modrm_reg;
 	int r;
 
-	if (ctxt->ops->set_cr(ctxt, cr_num, ctxt->src.val))
+	r = ctxt->ops->set_cr(ctxt, cr_num, ctxt->src.val);
+	if (r == X86EMUL_MEMORY_FAULT)
+		return r;
+	if (r)
 		return emulate_gp(ctxt, 0);
 
 	/* Disable writeback. */
@@ -3939,6 +3951,8 @@ static int check_perm_in(struct x86_emulate_ctxt *ctxt)
 
 	ctxt->dst.bytes = min(ctxt->dst.bytes, 4u);
 	r = emulator_io_permitted(ctxt, ctxt->src.val, ctxt->dst.bytes);
+	if (r == X86EMUL_MEMORY_FAULT)
+		return r;
 	if (r)
 		return emulate_gp(ctxt, 0);
 
@@ -3951,6 +3965,8 @@ static int check_perm_out(struct x86_emulate_ctxt *ctxt)
 
 	ctxt->src.bytes = min(ctxt->src.bytes, 4u);
 	r = emulator_io_permitted(ctxt, ctxt->dst.val, ctxt->src.bytes);
+	if (r == X86EMUL_MEMORY_FAULT)
+		return r;
 	if (r)
 		return emulate_gp(ctxt, 0);
 
@@ -5219,6 +5235,8 @@ done_modrm:
 done:
 	if (rc == X86EMUL_PROPAGATE_FAULT)
 		ctxt->have_exception = true;
+	if (rc == X86EMUL_MEMORY_FAULT)
+		return EMULATION_MEMORY_FAULT;
 	return (rc != X86EMUL_CONTINUE) ? EMULATION_FAILED : EMULATION_OK;
 }
 
@@ -5579,6 +5597,8 @@ writeback:
 		ctxt->eip = (u32)ctxt->_eip;
 
 done:
+	if (rc == X86EMUL_MEMORY_FAULT)
+		return EMULATION_MEMORY_FAULT;
 	if (rc == X86EMUL_PROPAGATE_FAULT) {
 		if (KVM_EMULATOR_BUG_ON(ctxt->exception.vector > 0x1f, ctxt))
 			return EMULATION_FAILED;

@@ -5342,19 +5342,21 @@ static bool rmode_exception(struct kvm_vcpu *vcpu, int vec)
 static int handle_rmode_exception(struct kvm_vcpu *vcpu,
 				  int vec, u32 err_code)
 {
+	int r;
+
 	/*
 	 * Instruction with address size override prefix opcode 0x67
 	 * Cause the #SS fault with 0 error code in VM86 mode.
 	 */
 	if (((vec == GP_VECTOR) || (vec == SS_VECTOR)) && err_code == 0) {
-		if (kvm_emulate_instruction(vcpu, 0)) {
-			if (vcpu->arch.halt_request) {
-				vcpu->arch.halt_request = 0;
-				return kvm_emulate_halt_noskip(vcpu);
-			}
-			return 1;
+		r = kvm_emulate_instruction(vcpu, 0);
+		if (r <= 0)
+			return r;
+		if (vcpu->arch.halt_request) {
+			vcpu->arch.halt_request = 0;
+			return kvm_emulate_halt_noskip(vcpu);
 		}
-		return 0;
+		return 1;
 	}
 
 	/*
@@ -6080,6 +6082,7 @@ static int handle_invalid_guest_state(struct kvm_vcpu *vcpu)
 	struct vcpu_vmx *vmx = to_vmx(vcpu);
 	bool intr_window_requested;
 	unsigned count = 130;
+	int r;
 
 	intr_window_requested = exec_controls_get(vmx) &
 				CPU_BASED_INTR_WINDOW_EXITING;
@@ -6098,8 +6101,9 @@ static int handle_invalid_guest_state(struct kvm_vcpu *vcpu)
 		 */
 		smp_rmb();
 
-		if (!kvm_emulate_instruction(vcpu, 0))
-			return 0;
+		r = kvm_emulate_instruction(vcpu, 0);
+		if (r <= 0)
+			return r;
 
 		if (vmx_unhandleable_emulation_required(vcpu)) {
 			kvm_prepare_emulation_failure_exit(vcpu);

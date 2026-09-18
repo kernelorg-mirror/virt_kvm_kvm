@@ -236,7 +236,9 @@ static int handle_encls_ecreate(struct kvm_vcpu *vcpu)
 	 */
 	r = kvm_read_guest_virt(vcpu, pageinfo_gva, &pageinfo,
 				sizeof(pageinfo), &ex);
-	if (r == X86EMUL_PROPAGATE_FAULT) {
+	if (r == X86EMUL_MEMORY_FAULT) {
+		return -EFAULT;
+	} else if (r == X86EMUL_PROPAGATE_FAULT) {
 		kvm_inject_emulated_page_fault(vcpu, &ex);
 		return 1;
 	} else if (r != X86EMUL_CONTINUE) {

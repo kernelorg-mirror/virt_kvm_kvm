@@ -2363,13 +2363,17 @@ static int gp_interception(struct kvm_vcpu *vcpu)
 	struct vcpu_svm *svm = to_svm(vcpu);
 	u32 error_code = svm->vmcb->control.exit_info_1;
 	u64 svm_exit_code;
+	int r;
 
 	/* Both #GP cases have zero error_code */
 	if (error_code)
 		goto reinject;
 
 	/* Decode the instruction for usage later */
-	if (x86_decode_emulated_instruction(vcpu, 0, NULL, 0) != EMULATION_OK)
+	r = x86_decode_emulated_instruction(vcpu, 0, NULL, 0);
+	if (r == EMULATION_MEMORY_FAULT)
+		return -EFAULT;
+	if (r != EMULATION_OK)
 		goto reinject;
 
 	/* FIXME: Handle SVM instructions through the emulator */

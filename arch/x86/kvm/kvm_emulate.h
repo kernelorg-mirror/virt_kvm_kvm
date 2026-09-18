@@ -97,6 +97,8 @@ struct x86_instruction_info {
 #define X86EMUL_INTERCEPTED     6 /* Intercepted by nested VMCB/VMCS */
 /* Emulation during event vectoring is unhandleable. */
 #define X86EMUL_UNHANDLEABLE_VECTORING	7
+/* Terminate emulation and return a memory fault to userspace. */
+#define X86EMUL_MEMORY_FAULT	8
 
 /* x86-specific emulation flags */
 #define X86EMUL_F_WRITE			BIT(0)
@@ -532,6 +534,7 @@ bool x86_page_table_writing_insn(struct x86_emulate_ctxt *ctxt);
 #define EMULATION_OK 0
 #define EMULATION_RESTART 1
 #define EMULATION_INTERCEPTED 2
+#define EMULATION_MEMORY_FAULT 3
 void init_decode_cache(struct x86_emulate_ctxt *ctxt);
 int x86_emulate_insn(struct x86_emulate_ctxt *ctxt, bool check_intercepts);
 int emulator_task_switch(struct x86_emulate_ctxt *ctxt,

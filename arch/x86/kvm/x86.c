@@ -4865,7 +4865,6 @@ static int kvm_read_guest_virt_helper(gva_t addr, void *val, unsigned int bytes,
 {
 	struct kvm_pagewalk *gva_walk = &vcpu->arch.gva_walk;
 	void *data = val;
-	int r = X86EMUL_CONTINUE;
 
 	while (bytes) {
 		gpa_t gpa = gva_walk->gva_to_gpa(vcpu, gva_walk, addr, access, exception);
@@ -4878,16 +4877,16 @@ static int kvm_read_guest_virt_helper(gva_t addr, void *val, unsigned int bytes,
 		ret = kvm_vcpu_read_guest_page(vcpu, gpa >> PAGE_SHIFT, data,
 					       offset, toread);
 		if (ret < 0) {
-			r = X86EMUL_IO_NEEDED;
-			goto out;
+			if (kvm_prepare_memory_fault_exit_for_range(vcpu, gpa, toread, false))
+				return X86EMUL_MEMORY_FAULT;
+			return X86EMUL_IO_NEEDED;
 		}
 
 		bytes -= toread;
 		data += toread;
 		addr += toread;
 	}
-out:
-	return r;
+	return X86EMUL_CONTINUE;
 }
 
 /* used for instruction fetching */
@@ -4912,8 +4911,16 @@ static int kvm_fetch_guest_virt(struct x86_emulate_ctxt *ctxt,
 		bytes = (unsigned)PAGE_SIZE - offset;
 	ret = kvm_vcpu_fetch_guest_page(vcpu, gpa >> PAGE_SHIFT, val,
 					offset, bytes);
-	if (unlikely(ret < 0))
+	if (unlikely(ret < 0)) {
+		unsigned long attrs = kvm_get_vm_memory_attributes(vcpu->kvm, gpa_to_gfn(gpa));
+
+		if (!kvm_mem_attributes_may_exec(attrs)) {
+			kvm_prepare_memory_fault_exit(vcpu, gpa & PAGE_MASK, PAGE_SIZE,
+						      false, true, false);
+			return X86EMUL_MEMORY_FAULT;
+		}
 		return X86EMUL_IO_NEEDED;
+	}
 
 	return X86EMUL_CONTINUE;
 }
@@ -4957,7 +4964,6 @@ static int kvm_write_guest_virt_helper(gva_t addr, void *val, unsigned int bytes
 {
 	struct kvm_pagewalk *gva_walk = &vcpu->arch.gva_walk;
 	void *data = val;
-	int r = X86EMUL_CONTINUE;
 
 	while (bytes) {
 		gpa_t gpa = gva_walk->gva_to_gpa(vcpu, gva_walk, addr, access, exception);
@@ -4969,16 +4975,16 @@ static int kvm_write_guest_virt_helper(gva_t addr, void *val, unsigned int bytes
 			return X86EMUL_PROPAGATE_FAULT;
 		ret = kvm_vcpu_write_guest(vcpu, gpa, data, towrite);
 		if (ret < 0) {
-			r = X86EMUL_IO_NEEDED;
-			goto out;
+			if (kvm_prepare_memory_fault_exit_for_range(vcpu, gpa, towrite, true))
+				return X86EMUL_MEMORY_FAULT;
+			return X86EMUL_IO_NEEDED;
 		}
 
 		bytes -= towrite;
 		data += towrite;
 		addr += towrite;
 	}
-out:
-	return r;
+	return X86EMUL_CONTINUE;
 }
 
 static int emulator_write_std(struct x86_emulate_ctxt *ctxt, gva_t addr, void *val,
@@ -5098,7 +5104,7 @@ struct read_write_emulator_ops {
 static int emulator_read_guest(struct kvm_vcpu *vcpu, gpa_t gpa,
 			       void *val, int bytes)
 {
-	return !kvm_vcpu_read_guest(vcpu, gpa, val, bytes);
+	return kvm_vcpu_read_guest(vcpu, gpa, val, bytes);
 }
 
 static int emulator_write_guest(struct kvm_vcpu *vcpu, gpa_t gpa,
@@ -5107,10 +5113,10 @@ static int emulator_write_guest(struct kvm_vcpu *vcpu, gpa_t gpa,
 	int ret;
 
 	ret = kvm_vcpu_write_guest(vcpu, gpa, val, bytes);
-	if (ret < 0)
-		return 0;
+	if (ret)
+		return ret;
 	kvm_page_track_write(vcpu, gpa, val, bytes);
-	return 1;
+	return 0;
 }
 
 static int emulator_read_write_onepage(unsigned long addr, void *val,
@@ -5139,6 +5145,8 @@ static int emulator_read_write_onepage(unsigned long addr, void *val,
 		ret = vcpu_is_mmio_gpa(vcpu, addr, gpa, write);
 	} else {
 		ret = vcpu_mmio_gva_to_gpa(vcpu, addr, &gpa, exception, write);
+		if (ret == -EFAULT)
+			return X86EMUL_MEMORY_FAULT;
 		if (ret < 0)
 			return X86EMUL_PROPAGATE_FAULT;
 	}
@@ -5151,8 +5159,14 @@ static int emulator_read_write_onepage(unsigned long addr, void *val,
 	 * i.e. if accessing host user memory failed, but this has been KVM's
 	 * historical ABI for decades.
 	 */
-	if (!ret && ops->read_write_guest(vcpu, gpa, val, bytes))
-		return X86EMUL_CONTINUE;
+	if (!ret) {
+		ret = ops->read_write_guest(vcpu, gpa, val, bytes);
+		if (!ret)
+			return X86EMUL_CONTINUE;
+	}
+
+	if (kvm_prepare_memory_fault_exit_for_range(vcpu, gpa, bytes, write))
+		return X86EMUL_MEMORY_FAULT;
 
 	/*
 	 * Attempt to handle emulated MMIO within the kernel, e.g. for accesses
@@ -5602,6 +5616,8 @@ static int emulator_set_cr(struct x86_emulate_ctxt *ctxt, int cr, ulong val)
 		res = -1;
 	}
 
+	if (res == -EFAULT)
+		return X86EMUL_MEMORY_FAULT;
 	return res;
 }
 
@@ -6416,6 +6432,8 @@ int x86_emulate_instruction(struct kvm_vcpu *vcpu, gpa_t cr2_or_gpa,
 
 		r = x86_decode_emulated_instruction(vcpu, emulation_type,
 						    insn, insn_len);
+		if (r == EMULATION_MEMORY_FAULT)
+			return -EFAULT;
 		if (r != EMULATION_OK)  {
 			if ((emulation_type & EMULTYPE_TRAP_UD) ||
 			    (emulation_type & EMULTYPE_TRAP_UD_FORCED)) {
@@ -6528,7 +6546,7 @@ restart:
 	if (r == EMULATION_INTERCEPTED)
 		return 1;
 
-	if (r == EMULATION_FAILED) {
+	if (r == EMULATION_MEMORY_FAULT || r == EMULATION_FAILED) {
 		if (kvm_unprotect_and_retry_on_failure(vcpu, cr2_or_gpa,
 						       emulation_type))
 			return 1;
@@ -9212,6 +9230,8 @@ int kvm_task_switch(struct kvm_vcpu *vcpu, u16 tss_selector, int idt_index,
 
 	ret = emulator_task_switch(ctxt, tss_selector, idt_index, reason,
 				   has_error_code, error_code);
+	if (ret == EMULATION_MEMORY_FAULT)
+		goto unhandled_task_switch;
 
 	/*
 	 * Report an error userspace if MMIO is needed, as KVM doesn't support

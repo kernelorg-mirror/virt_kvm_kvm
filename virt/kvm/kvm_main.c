@@ -2485,6 +2485,30 @@ static u64 kvm_supports_memory_protection_attr(struct kvm *kvm)
 #endif
 
 #ifdef CONFIG_KVM_VM_MEMORY_ATTRIBUTES
+bool kvm_prepare_memory_fault_exit_for_range(struct kvm_vcpu *vcpu, gpa_t gpa,
+					     size_t size, bool write)
+{
+	gfn_t gfn, last;
+
+	last = gpa_to_gfn(gpa + size - 1);
+	for (gfn = gpa_to_gfn(gpa); gfn <= last; gfn++) {
+		if (!kvm_mem_attributes_may_read_gfn(vcpu->kvm, gfn)) {
+			kvm_prepare_memory_fault_exit(vcpu, gfn_to_gpa(gfn), PAGE_SIZE,
+						      write, false, false);
+			return true;
+		}
+
+		if (write && !kvm_mem_attributes_may_write_gfn(vcpu->kvm, gfn)) {
+			kvm_prepare_memory_fault_exit(vcpu, gfn_to_gpa(gfn), PAGE_SIZE,
+						      true, false, false);
+			return true;
+		}
+	}
+
+	return false;
+}
+EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_prepare_memory_fault_exit_for_range);
+
 u64 kvm_supported_vm_mem_attributes(struct kvm *kvm)
 {
 	u64 supported_attrs = 0;
