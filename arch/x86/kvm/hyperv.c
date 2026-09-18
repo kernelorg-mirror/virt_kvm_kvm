@@ -2119,8 +2119,10 @@ static s64 kvm_hv_flush_tlb(struct kvm_vcpu *vcpu, struct kvm_hv_hcall *hc)
 
 	/* Slow direct hypercalls from L2 provide a nested GPA. */
 	if (!hc->fast) {
-		hc->ingpa = kvm_translate_gpa(vcpu, &vcpu->arch.gva_walk, hc->ingpa,
-					      PFERR_GUEST_FINAL_MASK, NULL, 0);
+		r = kvm_translate_gpa(vcpu, &vcpu->arch.gva_walk, hc->ingpa,
+				      PFERR_GUEST_FINAL_MASK, &hc->ingpa, NULL, 0);
+		if (r)
+			return r;
 		if (unlikely(hc->ingpa == INVALID_GPA))
 			return HV_STATUS_INVALID_HYPERCALL_INPUT;
 	}

@@ -405,9 +405,9 @@ retry_walk:
 		walker->table_gfn[walker->level - 1] = table_gfn;
 		walker->pte_gpa[walker->level - 1] = pte_gpa;
 
-		real_gpa = kvm_translate_gpa(vcpu, w, gfn_to_gpa(table_gfn),
-					     nested_access | PFERR_GUEST_PAGE_MASK,
-					     &walker->fault, 0);
+		kvm_translate_gpa(vcpu, w, gfn_to_gpa(table_gfn),
+				  nested_access | PFERR_GUEST_PAGE_MASK,
+				  &real_gpa, &walker->fault, 0);
 
 		if (unlikely(real_gpa == INVALID_GPA))
 			return 0;
@@ -465,9 +465,9 @@ retry_walk:
 		gfn += pse36_gfn_delta(pte);
 #endif
 
-	real_gpa = kvm_translate_gpa(vcpu, w, gfn_to_gpa(gfn),
-				     access | PFERR_GUEST_FINAL_MASK,
-				     &walker->fault, walker->pte_access);
+	kvm_translate_gpa(vcpu, w, gfn_to_gpa(gfn),
+			  access | PFERR_GUEST_FINAL_MASK, &real_gpa,
+			  &walker->fault, walker->pte_access);
 	if (real_gpa == INVALID_GPA)
 		return 0;
 

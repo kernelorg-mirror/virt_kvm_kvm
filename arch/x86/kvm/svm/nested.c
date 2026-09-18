@@ -2157,24 +2157,24 @@ static bool svm_get_nested_state_pages(struct kvm_vcpu *vcpu)
 	return true;
 }
 
-static gpa_t svm_translate_nested_gpa(struct kvm_vcpu *vcpu, gpa_t gpa,
-				      u64 access,
-				      struct x86_exception *exception,
-				      u64 pte_access)
+static int svm_translate_nested_gpa(struct kvm_vcpu *vcpu, gpa_t gpa,
+				    u64 access, gpa_t *translated_gpa,
+				    struct x86_exception *exception,
+				    u64 pte_access)
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
 	struct kvm_pagewalk *w = &vcpu->arch.ngpa_walk;
-	gpa_t result;
 
-	if (WARN_ON_ONCE(!mmu_is_nested(vcpu)))
-		return gpa;
+	if (WARN_ON_ONCE(!mmu_is_nested(vcpu))) {
+		*translated_gpa = gpa;
+		return 0;
+	}
 
 	/* Non-GMET walks are always user-walks */
 	if (!(svm->nested.ctl.misc_ctl & SVM_MISC_ENABLE_GMET))
 		access |= PFERR_USER_MASK;
 
-	w->gva_to_gpa(vcpu, w, gpa, access, &result, exception);
-	return result;
+	return w->gva_to_gpa(vcpu, w, gpa, access, translated_gpa, exception);
 }
 
 struct kvm_x86_nested_ops svm_nested_ops __initdata = {

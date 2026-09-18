@@ -377,15 +377,17 @@ static inline bool mmu_is_nested(struct kvm_vcpu *vcpu)
 	return vcpu->arch.mmu == &vcpu->arch.guest_mmu;
 }
 
-static inline gpa_t kvm_translate_gpa(struct kvm_vcpu *vcpu,
-				      struct kvm_pagewalk *w,
-				      gpa_t gpa, u64 access,
-				      struct x86_exception *exception,
-				      u64 pte_access)
+static inline int kvm_translate_gpa(struct kvm_vcpu *vcpu,
+				    struct kvm_pagewalk *w,
+				    gpa_t gpa, u64 access, gpa_t *translated_gpa,
+				    struct x86_exception *exception,
+				    u64 pte_access)
 {
-	if (!mmu_is_nested(vcpu) || w == &vcpu->arch.ngpa_walk)
-		return gpa;
-	return kvm_nested_call(translate_nested_gpa)(vcpu, gpa, access,
+	if (!mmu_is_nested(vcpu) || w == &vcpu->arch.ngpa_walk) {
+		*translated_gpa = gpa;
+		return 0;
+	}
+	return kvm_nested_call(translate_nested_gpa)(vcpu, gpa, access, translated_gpa,
 						     exception, pte_access);
 }
 

@@ -7317,10 +7317,17 @@ static int kvm_pv_clock_pairing(struct kvm_vcpu *vcpu, gpa_t paddr,
 
 	*ret = -KVM_EFAULT;
 	while (offset < sizeof(clock_pairing)) {
-		gpa_t gpa = kvm_translate_gpa(vcpu, &vcpu->arch.gva_walk, paddr + offset,
-					      PFERR_WRITE_MASK | PFERR_GUEST_FINAL_MASK, NULL, 0);
-		size_t len = min_t(size_t, sizeof(clock_pairing) - offset,
-				   PAGE_SIZE - offset_in_page(gpa));
+		gpa_t gpa;
+		size_t len;
+		int r;
+
+		r = kvm_translate_gpa(vcpu, &vcpu->arch.gva_walk, paddr + offset,
+				      PFERR_WRITE_MASK | PFERR_GUEST_FINAL_MASK,
+				      &gpa, NULL, 0);
+		if (r)
+			return r;
+		len = min_t(size_t, sizeof(clock_pairing) - offset,
+			    PAGE_SIZE - offset_in_page(gpa));
 
 		if (gpa == INVALID_GPA)
 			return 0;

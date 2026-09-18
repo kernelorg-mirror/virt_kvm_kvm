@@ -7478,16 +7478,17 @@ __init int nested_vmx_hardware_setup(int (*exit_handlers[])(struct kvm_vcpu *))
 }
 
 
-static gpa_t vmx_translate_nested_gpa(struct kvm_vcpu *vcpu, gpa_t gpa,
-				      u64 access,
-				      struct x86_exception *exception,
-				      u64 pte_access)
+static int vmx_translate_nested_gpa(struct kvm_vcpu *vcpu, gpa_t gpa,
+				    u64 access, gpa_t *translated_gpa,
+				    struct x86_exception *exception,
+				    u64 pte_access)
 {
 	struct kvm_pagewalk *w = &vcpu->arch.ngpa_walk;
-	gpa_t result;
 
-	if (WARN_ON_ONCE(!mmu_is_nested(vcpu)))
-		return gpa;
+	if (WARN_ON_ONCE(!mmu_is_nested(vcpu))) {
+		*translated_gpa = gpa;
+		return 0;
+	}
 
 	/*
 	 * MBEC differentiates based on the effective U/S bit of
@@ -7497,8 +7498,7 @@ static gpa_t vmx_translate_nested_gpa(struct kvm_vcpu *vcpu, gpa_t gpa,
 	if ((pte_access & ACC_USER_MASK) && (access & PFERR_GUEST_FINAL_MASK))
 		access |= PFERR_USER_MASK;
 
-	w->gva_to_gpa(vcpu, w, gpa, access, &result, exception);
-	return result;
+	return w->gva_to_gpa(vcpu, w, gpa, access, translated_gpa, exception);
 }
 
 struct kvm_x86_nested_ops vmx_nested_ops __initdata = {
