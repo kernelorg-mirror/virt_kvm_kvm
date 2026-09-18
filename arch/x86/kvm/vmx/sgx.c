@@ -84,7 +84,7 @@ static int sgx_gva_to_gpa(struct kvm_vcpu *vcpu, gva_t gva, bool write,
 
 	if (*gpa == INVALID_GPA) {
 		kvm_inject_emulated_page_fault(vcpu, &ex);
-		return -EFAULT;
+		return 1;
 	}
 
 	return 0;
@@ -256,10 +256,13 @@ static int handle_encls_ecreate(struct kvm_vcpu *vcpu)
 	 * Translate the SECINFO, SOURCE and SECS pointers from GVA to GPA.
 	 * Resume the guest on failure to inject a #PF.
 	 */
-	if (sgx_gva_to_gpa(vcpu, metadata_gva, false, &metadata_gpa) ||
-	    sgx_gva_to_gpa(vcpu, contents_gva, false, &contents_gpa) ||
-	    sgx_gva_to_gpa(vcpu, secs_gva, true, &secs_gpa))
-		return 1;
+	r = sgx_gva_to_gpa(vcpu, metadata_gva, false, &metadata_gpa);
+	if (!r)
+		r = sgx_gva_to_gpa(vcpu, contents_gva, false, &contents_gpa);
+	if (!r)
+		r = sgx_gva_to_gpa(vcpu, secs_gva, true, &secs_gpa);
+	if (r)
+		return r < 0 ? r : 1;
 
 	/*
 	 * ...and then to HVA.  The order of accesses isn't architectural, i.e.
@@ -314,10 +317,13 @@ static int handle_encls_einit(struct kvm_vcpu *vcpu)
 	 * Translate the SIGSTRUCT, SECS and TOKEN pointers from GVA to GPA.
 	 * Resume the guest on failure to inject a #PF.
 	 */
-	if (sgx_gva_to_gpa(vcpu, sig_gva, false, &sig_gpa) ||
-	    sgx_gva_to_gpa(vcpu, secs_gva, true, &secs_gpa) ||
-	    sgx_gva_to_gpa(vcpu, token_gva, false, &token_gpa))
-		return 1;
+	ret = sgx_gva_to_gpa(vcpu, sig_gva, false, &sig_gpa);
+	if (!ret)
+		ret = sgx_gva_to_gpa(vcpu, secs_gva, true, &secs_gpa);
+	if (!ret)
+		ret = sgx_gva_to_gpa(vcpu, token_gva, false, &token_gpa);
+	if (ret)
+		return ret < 0 ? ret : 1;
 
 	/*
 	 * ...and then to HVA.  The order of accesses isn't architectural, i.e.
