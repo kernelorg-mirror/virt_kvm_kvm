@@ -5630,6 +5630,7 @@ static int handle_set_cr0(struct kvm_vcpu *vcpu, unsigned long val)
 	if (is_guest_mode(vcpu)) {
 		struct vmcs12 *vmcs12 = get_vmcs12(vcpu);
 		unsigned long orig_val = val;
+		int r;
 
 		/*
 		 * We get here when L2 changed cr0 in a way that did not change
@@ -5642,8 +5643,9 @@ static int handle_set_cr0(struct kvm_vcpu *vcpu, unsigned long val)
 		val = (val & ~vmcs12->cr0_guest_host_mask) |
 			(vmcs12->guest_cr0 & vmcs12->cr0_guest_host_mask);
 
-		if (kvm_set_cr0(vcpu, val))
-			return 1;
+		r = kvm_set_cr0(vcpu, val);
+		if (r)
+			return r;
 		vmcs_writel(CR0_READ_SHADOW, orig_val);
 		return 0;
 	} else {
@@ -5656,12 +5658,14 @@ static int handle_set_cr4(struct kvm_vcpu *vcpu, unsigned long val)
 	if (is_guest_mode(vcpu)) {
 		struct vmcs12 *vmcs12 = get_vmcs12(vcpu);
 		unsigned long orig_val = val;
+		int r;
 
 		/* analogously to handle_set_cr0 */
 		val = (val & ~vmcs12->cr4_guest_host_mask) |
 			(vmcs12->guest_cr4 & vmcs12->cr4_guest_host_mask);
-		if (kvm_set_cr4(vcpu, val))
-			return 1;
+		r = kvm_set_cr4(vcpu, val);
+		if (r)
+			return r;
 		vmcs_writel(CR4_READ_SHADOW, orig_val);
 		return 0;
 	} else
