@@ -319,6 +319,12 @@ static inline u64 kvm_pdptr_read(struct kvm_vcpu *vcpu, int index)
 	return vcpu->arch.pdptrs[index];
 }
 
+static inline int kvm_pdptr_get(struct kvm_vcpu *vcpu, int index, u64 *pdptr)
+{
+	*pdptr = kvm_pdptr_read(vcpu, index);
+	return 0;
+}
+
 static inline void kvm_pdptr_write(struct kvm_vcpu *vcpu, int index, u64 value)
 {
 	vcpu->arch.pdptrs[index] = value;

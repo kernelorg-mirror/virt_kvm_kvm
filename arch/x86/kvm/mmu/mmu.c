@@ -4214,7 +4214,9 @@ static int mmu_alloc_shadow_roots(struct kvm_vcpu *vcpu)
 	 */
 	if (w->cpu_role.base.level == PT32E_ROOT_LEVEL) {
 		for (i = 0; i < 4; ++i) {
-			pdptrs[i] = w->get_pdptr(vcpu, i);
+			r = w->get_pdptr(vcpu, i, &pdptrs[i]);
+			if (r)
+				return r;
 			if (!(pdptrs[i] & PT_PRESENT_MASK))
 				continue;
 
@@ -6221,7 +6223,7 @@ static void init_kvm_page_walk(struct kvm_vcpu *vcpu, struct kvm_pagewalk *w,
 
 	w->cpu_role.as_u64   = cpu_role.as_u64;
 	w->inject_page_fault = kvm_inject_page_fault;
-	w->get_pdptr         = kvm_pdptr_read;
+	w->get_pdptr         = kvm_pdptr_get;
 	w->get_guest_pgd     = get_guest_cr3;
 
 	if (!is_cr0_pg(w))

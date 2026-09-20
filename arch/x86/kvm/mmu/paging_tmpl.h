@@ -89,6 +89,7 @@ struct guest_walker {
 	unsigned int pt_access[PT_MAX_FULL_LEVELS];
 	unsigned int pte_access;
 	gfn_t gfn;
+	int error;
 	struct x86_exception fault;
 };
 
@@ -349,6 +350,7 @@ static int FNAME(walk_addr_generic)(struct guest_walker *walker,
 
 	trace_kvm_mmu_pagetable_walk(addr, access);
 retry_walk:
+	walker->error = 0;
 	walker->level = w->cpu_role.base.level;
 	pte           = kvm_mmu_get_guest_pgd(vcpu, w);
 	have_ad       = PT_HAVE_ACCESSED_DIRTY(w);
@@ -356,7 +358,9 @@ retry_walk:
 #if PTTYPE == 64
 	walk_nx_mask = 1ULL << PT64_NX_SHIFT;
 	if (walker->level == PT32E_ROOT_LEVEL) {
-		pte = w->get_pdptr(vcpu, (addr >> 30) & 3);
+		walker->error = w->get_pdptr(vcpu, (addr >> 30) & 3, &pte);
+		if (walker->error)
+			goto error;
 		trace_kvm_mmu_paging_element(pte, walker->level);
 		if (!FNAME(is_present_gpte)(w, pte))
 			goto error;
@@ -405,9 +409,11 @@ retry_walk:
 		walker->table_gfn[walker->level - 1] = table_gfn;
 		walker->pte_gpa[walker->level - 1] = pte_gpa;
 
-		kvm_translate_gpa(vcpu, w, gfn_to_gpa(table_gfn),
-				  nested_access | PFERR_GUEST_PAGE_MASK,
-				  &real_gpa, &walker->fault, 0);
+		walker->error = kvm_translate_gpa(vcpu, w, gfn_to_gpa(table_gfn),
+						  nested_access | PFERR_GUEST_PAGE_MASK,
+						  &real_gpa, &walker->fault, 0);
+		if (walker->error)
+			return 0;
 
 		if (unlikely(real_gpa == INVALID_GPA))
 			return 0;
@@ -420,6 +426,16 @@ retry_walk:
 					    &walker->pte_writable[walker->level - 1]);
 		if (unlikely(kvm_is_error_hva(host_addr)))
 			goto error;
+
+		if (!kvm_mem_attributes_may_read_gfn(vcpu->kvm, gpa_to_gfn(real_gpa))) {
+			walker->error = -EFAULT;
+			kvm_prepare_memory_fault_exit(vcpu, real_gpa & PAGE_MASK,
+						      PAGE_SIZE, false, false, false);
+			goto error;
+		}
+
+		if (!kvm_mem_attributes_may_write_gfn(vcpu->kvm, gpa_to_gfn(real_gpa)))
+			walker->pte_writable[walker->level - 1] = false;
 
 		ptep_user = (pt_element_t __user *)((void *)host_addr + offset);
 		if (unlikely(get_user(pte, ptep_user)))
@@ -465,9 +481,11 @@ retry_walk:
 		gfn += pse36_gfn_delta(pte);
 #endif
 
-	kvm_translate_gpa(vcpu, w, gfn_to_gpa(gfn),
-			  access | PFERR_GUEST_FINAL_MASK, &real_gpa,
-			  &walker->fault, walker->pte_access);
+	walker->error = kvm_translate_gpa(vcpu, w, gfn_to_gpa(gfn),
+					  access | PFERR_GUEST_FINAL_MASK, &real_gpa,
+					  &walker->fault, walker->pte_access);
+	if (walker->error)
+		return 0;
 	if (real_gpa == INVALID_GPA)
 		return 0;
 
@@ -832,6 +850,9 @@ static int FNAME(page_fault)(struct kvm_vcpu *vcpu, struct kvm_page_fault *fault
 	 * The page is not mapped by the guest.  Let the guest handle it.
 	 */
 	if (!r) {
+		if (walker.error)
+			return walker.error;
+
 		if (!fault->prefetch)
 			__kvm_inject_emulated_page_fault(vcpu, &walker.fault, true);
 
@@ -929,8 +950,11 @@ static int FNAME(gva_to_gpa)(struct kvm_vcpu *vcpu, struct kvm_pagewalk *w,
 	if (r) {
 		*gpa = gfn_to_gpa(walker.gfn);
 		*gpa |= addr & ~PAGE_MASK;
-	} else if (exception)
+	} else if (walker.error) {
+		return walker.error;
+	} else if (exception) {
 		*exception = walker.fault;
+	}
 
 	return 0;
 }

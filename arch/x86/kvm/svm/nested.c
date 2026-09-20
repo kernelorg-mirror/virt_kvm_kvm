@@ -71,22 +71,22 @@ static void nested_svm_inject_npf_exit(struct kvm_vcpu *vcpu,
 	nested_svm_vmexit(svm);
 }
 
-static u64 nested_svm_get_tdp_pdptr(struct kvm_vcpu *vcpu, int index)
+static int nested_svm_get_tdp_pdptr(struct kvm_vcpu *vcpu, int index, u64 *pdptr)
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
 	u64 cr3 = svm->nested.ctl.nested_cr3;
-	u64 pdpte;
-	int ret;
+	int r;
 
 	/*
 	 * Note, nCR3 is "assumed" to be 32-byte aligned, i.e. the CPU ignores
 	 * nCR3[4:0] when loading PDPTEs from memory.
 	 */
-	ret = kvm_vcpu_read_guest_page(vcpu, gpa_to_gfn(cr3), &pdpte,
-				       (cr3 & GENMASK(11, 5)) + index * 8, 8);
-	if (ret)
-		return 0;
-	return pdpte;
+	r = kvm_vcpu_read_guest_page(vcpu, gpa_to_gfn(cr3), pdptr,
+				     (cr3 & GENMASK(11, 5)) + index * 8, 8);
+	if (r == -EFAULT)
+		kvm_prepare_memory_fault_exit(vcpu, cr3 & PAGE_MASK, PAGE_SIZE,
+					      false, false, false);
+	return r;
 }
 
 static unsigned long nested_svm_get_tdp_cr3(struct kvm_vcpu *vcpu)
