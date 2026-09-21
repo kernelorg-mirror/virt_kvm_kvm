@@ -149,17 +149,29 @@ static inline u64 pdptr_rsvd_bits(struct kvm_vcpu *vcpu)
 	return vcpu->arch.reserved_gpa_bits | rsvd_bits(5, 8) | rsvd_bits(1, 2);
 }
 
+int kvm_validate_pdptrs(struct kvm_vcpu *vcpu, const u64 *pdptrs)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(vcpu->arch.pdptrs); ++i) {
+		if ((pdptrs[i] & PT_PRESENT_MASK) &&
+		    (pdptrs[i] & pdptr_rsvd_bits(vcpu)))
+			return 0;
+	}
+	return 1;
+}
+EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_validate_pdptrs);
+
 /*
- * Load the pae pdptrs.  Return 1 if they are all valid, 0 otherwise.
+ * Read the PAE PDPTRs into @pdptrs.  Return 1 if they are valid, 0 if they are
+ * invalid, and a negative value on error.
  */
-int load_pdptrs(struct kvm_vcpu *vcpu, unsigned long cr3)
+int kvm_read_validate_pdptrs(struct kvm_vcpu *vcpu, unsigned long cr3, u64 *pdptrs)
 {
 	struct kvm_pagewalk *w = &vcpu->arch.gva_walk;
 	gfn_t pdpt_gfn = cr3 >> PAGE_SHIFT;
 	gpa_t real_gpa;
-	int i;
 	int ret;
-	u64 pdpte[ARRAY_SIZE(vcpu->arch.pdptrs)];
 
 	/*
 	 * If the MMU is nested, CR3 holds an L2 GPA and needs to be translated
@@ -174,8 +186,8 @@ int load_pdptrs(struct kvm_vcpu *vcpu, unsigned long cr3)
 		return 0;
 
 	/* Note the offset, PDPTRs are 32 byte aligned when using PAE paging. */
-	ret = kvm_vcpu_read_guest_page(vcpu, gpa_to_gfn(real_gpa), pdpte,
-				       cr3 & GENMASK(11, 5), sizeof(pdpte));
+	ret = kvm_vcpu_read_guest_page(vcpu, gpa_to_gfn(real_gpa), pdptrs,
+				       cr3 & GENMASK(11, 5), sizeof(vcpu->arch.pdptrs));
 	if (ret == -EFAULT) {
 		kvm_prepare_memory_fault_exit(vcpu, real_gpa & PAGE_MASK, PAGE_SIZE,
 					      false, false, false);
@@ -184,26 +196,37 @@ int load_pdptrs(struct kvm_vcpu *vcpu, unsigned long cr3)
 	if (ret)
 		return 0;
 
-	for (i = 0; i < ARRAY_SIZE(pdpte); ++i) {
-		if ((pdpte[i] & PT_PRESENT_MASK) &&
-		    (pdpte[i] & pdptr_rsvd_bits(vcpu))) {
-			return 0;
-		}
-	}
+	return kvm_validate_pdptrs(vcpu, pdptrs);
+}
+EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_read_validate_pdptrs);
 
+void kvm_commit_pdptrs(struct kvm_vcpu *vcpu, const u64 *pdptrs)
+{
 	/*
 	 * Marking VCPU_REG_PDPTR dirty doesn't work for !tdp_enabled.
 	 * Shadow page roots need to be reconstructed instead.
 	 */
-	if (!tdp_enabled && memcmp(vcpu->arch.pdptrs, pdpte, sizeof(vcpu->arch.pdptrs)))
+	if (!tdp_enabled && memcmp(vcpu->arch.pdptrs, pdptrs, sizeof(vcpu->arch.pdptrs)))
 		kvm_mmu_free_roots(vcpu->kvm, &vcpu->arch.root_mmu,
 				   KVM_MMU_ROOT_CURRENT);
 
-	memcpy(vcpu->arch.pdptrs, pdpte, sizeof(vcpu->arch.pdptrs));
+	memcpy(vcpu->arch.pdptrs, pdptrs, sizeof(vcpu->arch.pdptrs));
 	kvm_register_mark_dirty(vcpu, VCPU_REG_PDPTR);
 	kvm_make_request(KVM_REQ_LOAD_MMU_PGD, vcpu);
 	vcpu->arch.pdptrs_from_userspace = false;
+}
+EXPORT_SYMBOL_FOR_KVM_INTERNAL(kvm_commit_pdptrs);
 
+int load_pdptrs(struct kvm_vcpu *vcpu, unsigned long cr3)
+{
+	u64 pdptrs[ARRAY_SIZE(vcpu->arch.pdptrs)];
+	int r;
+
+	r = kvm_read_validate_pdptrs(vcpu, cr3, pdptrs);
+	if (r <= 0)
+		return r;
+
+	kvm_commit_pdptrs(vcpu, pdptrs);
 	return 1;
 }
 EXPORT_SYMBOL_FOR_KVM_INTERNAL(load_pdptrs);

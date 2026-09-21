@@ -63,6 +63,9 @@ unsigned long kvm_get_dr(struct kvm_vcpu *vcpu, int dr);
 unsigned long kvm_get_dr6_fixed_1(struct kvm_vcpu *vcpu);
 unsigned long kvm_get_cr8(struct kvm_vcpu *vcpu);
 void kvm_lmsw(struct kvm_vcpu *vcpu, unsigned long msw);
+int kvm_read_validate_pdptrs(struct kvm_vcpu *vcpu, unsigned long cr3, u64 *pdptrs);
+int kvm_validate_pdptrs(struct kvm_vcpu *vcpu, const u64 *pdptrs);
+void kvm_commit_pdptrs(struct kvm_vcpu *vcpu, const u64 *pdptrs);
 int load_pdptrs(struct kvm_vcpu *vcpu, unsigned long cr3);
 
 static inline bool is_long_mode(struct kvm_vcpu *vcpu)
