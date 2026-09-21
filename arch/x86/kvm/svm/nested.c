@@ -720,7 +720,7 @@ static int nested_svm_load_cr3(struct kvm_vcpu *vcpu, unsigned long cr3,
 	if (reload_pdptrs && is_pae_paging(vcpu)) {
 		if (nested_npt)
 			kvm_register_mark_for_reload(vcpu, VCPU_REG_PDPTR);
-		else if (CC(!load_pdptrs(vcpu, cr3)))
+		else if (CC(load_pdptrs(vcpu, cr3) <= 0))
 			return -EINVAL;
 	}
 
@@ -2141,11 +2141,13 @@ static bool svm_get_nested_state_pages(struct kvm_vcpu *vcpu)
 		 * nGPA translation. For !nNPT, reload eagerly unless userspace
 		 * already supplied authoritative PDPTRs via KVM_SET_SREGS2.
 		 */
-		if (nested_npt_enabled(to_svm(vcpu)))
+		if (nested_npt_enabled(to_svm(vcpu))) {
 			kvm_register_mark_for_reload(vcpu, VCPU_REG_PDPTR);
-		else if (!vcpu->arch.pdptrs_from_userspace &&
-			 CC(!load_pdptrs(vcpu, vcpu->arch.cr3)))
+		} else if (!vcpu->arch.pdptrs_from_userspace &&
+			 CC(load_pdptrs(vcpu, vcpu->arch.cr3) <= 0)) {
+			kvm_prepare_emulation_failure_exit(vcpu);
 			return false;
+		}
 	}
 
 	if (!nested_svm_merge_msrpm(vcpu))

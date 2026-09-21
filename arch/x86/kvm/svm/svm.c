@@ -1587,8 +1587,8 @@ static void svm_cache_reg(struct kvm_vcpu *vcpu, enum kvm_reg reg)
 		 * When !npt_enabled, vcpu->pdptrs[] is already available since
 		 * it is always updated per SDM when moving to CRs.
 		 */
-		if (npt_enabled)
-			load_pdptrs(vcpu, kvm_read_cr3(vcpu));
+		if (npt_enabled && load_pdptrs(vcpu, kvm_read_cr3(vcpu)) < 0)
+			kvm_vm_dead(vcpu->kvm);
 		break;
 	default:
 		KVM_BUG_ON(1, vcpu->kvm);
