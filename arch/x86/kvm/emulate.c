@@ -2925,7 +2925,9 @@ static int emulator_do_task_switch(struct x86_emulate_ctxt *ctxt,
 
 	if (reason == TASK_SWITCH_IRET || reason == TASK_SWITCH_JMP) {
 		curr_tss_desc.type &= ~(1 << 1); /* clear busy flag */
-		write_segment_descriptor(ctxt, old_tss_sel, &curr_tss_desc);
+		ret = write_segment_descriptor(ctxt, old_tss_sel, &curr_tss_desc);
+		if (ret != X86EMUL_CONTINUE)
+			return ret;
 	}
 
 	if (reason == TASK_SWITCH_IRET)
@@ -2949,7 +2951,9 @@ static int emulator_do_task_switch(struct x86_emulate_ctxt *ctxt,
 
 	if (reason != TASK_SWITCH_IRET) {
 		next_tss_desc.type |= (1 << 1); /* set busy flag */
-		write_segment_descriptor(ctxt, tss_selector, &next_tss_desc);
+		ret = write_segment_descriptor(ctxt, tss_selector, &next_tss_desc);
+		if (ret != X86EMUL_CONTINUE)
+			return ret;
 	}
 
 	ops->set_cr(ctxt, 0,  ops->get_cr(ctxt, 0) | X86_CR0_TS);
