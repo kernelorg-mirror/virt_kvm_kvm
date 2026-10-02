@@ -634,6 +634,7 @@ static int __set_sregs_common(struct kvm_vcpu *vcpu, struct kvm_sregs *sregs,
 			r = load_pdptrs(vcpu, kvm_read_cr3(vcpu));
 			if (r < 0) {
 				srcu_read_unlock(&vcpu->kvm->srcu, idx);
+				kvm_vm_dead(vcpu->kvm);
 				return r;
 			}
 			*mmu_reset_needed = 1;
