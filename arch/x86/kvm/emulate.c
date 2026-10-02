@@ -2526,8 +2526,8 @@ static bool emulator_bad_iopl(struct x86_emulate_ctxt *ctxt)
 #define VMWARE_PORT_VMPORT	(0x5658)
 #define VMWARE_PORT_VMRPC	(0x5659)
 
-static bool emulator_io_port_access_allowed(struct x86_emulate_ctxt *ctxt,
-					    u16 port, u16 len)
+static int emulator_io_port_access_allowed(struct x86_emulate_ctxt *ctxt,
+					   u16 port, u16 len)
 {
 	const struct x86_emulate_ops *ops = ctxt->ops;
 	struct desc_struct tr_seg;
@@ -2543,43 +2543,47 @@ static bool emulator_io_port_access_allowed(struct x86_emulate_ctxt *ctxt,
 	 */
 	if (enable_vmware_backdoor &&
 	    ((port == VMWARE_PORT_VMPORT) || (port == VMWARE_PORT_VMRPC)))
-		return true;
+		return 0;
 
 	ops->get_segment(ctxt, &tr, &tr_seg, &base3, VCPU_SREG_TR);
 	if (!tr_seg.p)
-		return false;
+		return -EACCES;
 	if (desc_limit_scaled(&tr_seg) < 103)
-		return false;
+		return -EACCES;
 	base = get_desc_base(&tr_seg);
 #ifdef CONFIG_X86_64
 	base |= ((u64)base3) << 32;
 #endif
 	r = ops->read_std(ctxt, base + 102, &io_bitmap_ptr, 2, NULL, true);
 	if (r != X86EMUL_CONTINUE)
-		return false;
+		return -EACCES;
 	if (io_bitmap_ptr + port/8 > desc_limit_scaled(&tr_seg))
-		return false;
+		return -EACCES;
 	r = ops->read_std(ctxt, base + io_bitmap_ptr + port/8, &perm, 2, NULL, true);
 	if (r != X86EMUL_CONTINUE)
-		return false;
+		return -EACCES;
 	if ((perm >> bit_idx) & mask)
-		return false;
-	return true;
+		return -EACCES;
+	return 0;
 }
 
-static bool emulator_io_permitted(struct x86_emulate_ctxt *ctxt,
-				  u16 port, u16 len)
+static int emulator_io_permitted(struct x86_emulate_ctxt *ctxt,
+				 u16 port, u16 len)
 {
-	if (ctxt->perm_ok)
-		return true;
+	int r;
 
-	if (emulator_bad_iopl(ctxt))
-		if (!emulator_io_port_access_allowed(ctxt, port, len))
-			return false;
+	if (ctxt->perm_ok)
+		return 0;
+
+	if (emulator_bad_iopl(ctxt)) {
+		r = emulator_io_port_access_allowed(ctxt, port, len);
+		if (r)
+			return r;
+	}
 
 	ctxt->perm_ok = true;
 
-	return true;
+	return 0;
 }
 
 static void string_registers_quirk(struct x86_emulate_ctxt *ctxt)
@@ -3931,8 +3935,11 @@ static int check_rdpmc(struct x86_emulate_ctxt *ctxt)
 
 static int check_perm_in(struct x86_emulate_ctxt *ctxt)
 {
+	int r;
+
 	ctxt->dst.bytes = min(ctxt->dst.bytes, 4u);
-	if (!emulator_io_permitted(ctxt, ctxt->src.val, ctxt->dst.bytes))
+	r = emulator_io_permitted(ctxt, ctxt->src.val, ctxt->dst.bytes);
+	if (r)
 		return emulate_gp(ctxt, 0);
 
 	return X86EMUL_CONTINUE;
@@ -3940,8 +3947,11 @@ static int check_perm_in(struct x86_emulate_ctxt *ctxt)
 
 static int check_perm_out(struct x86_emulate_ctxt *ctxt)
 {
+	int r;
+
 	ctxt->src.bytes = min(ctxt->src.bytes, 4u);
-	if (!emulator_io_permitted(ctxt, ctxt->dst.val, ctxt->src.bytes))
+	r = emulator_io_permitted(ctxt, ctxt->dst.val, ctxt->src.bytes);
+	if (r)
 		return emulate_gp(ctxt, 0);
 
 	return X86EMUL_CONTINUE;
