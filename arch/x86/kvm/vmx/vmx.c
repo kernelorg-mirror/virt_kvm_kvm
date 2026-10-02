@@ -1809,6 +1809,7 @@ static int skip_emulated_instruction(struct kvm_vcpu *vcpu)
 	union vmx_exit_reason exit_reason = vt_get_exit_reason(vcpu);
 	unsigned long rip, orig_rip;
 	u32 instr_len;
+	int r;
 
 	/*
 	 * Using VMCS.VM_EXIT_INSTRUCTION_LEN on EPT misconfig depends on
@@ -1857,7 +1858,10 @@ static int skip_emulated_instruction(struct kvm_vcpu *vcpu)
 #endif
 		kvm_rip_write(vcpu, rip);
 	} else {
-		if (!kvm_emulate_instruction(vcpu, EMULTYPE_SKIP))
+		r = kvm_emulate_instruction(vcpu, EMULTYPE_SKIP);
+		if (r < 0)
+			kvm_vm_dead(vcpu->kvm);
+		if (r <= 0)
 			return 0;
 	}
 
@@ -5538,8 +5542,8 @@ static int handle_exception_nmi(struct kvm_vcpu *vcpu)
 			 * higher priority.  Note, skipping ICEBP still clears
 			 * STI and MOVSS blocking.
 			 */
-			if (is_icebp(intr_info))
-				WARN_ON(!skip_emulated_instruction(vcpu));
+			if (is_icebp(intr_info) && !skip_emulated_instruction(vcpu))
+				return 0;
 
 			kvm_queue_exception_p(vcpu, DB_VECTOR, dr6);
 			return 1;

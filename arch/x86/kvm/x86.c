@@ -6235,8 +6235,8 @@ int kvm_skip_emulated_instruction(struct kvm_vcpu *vcpu)
 	int r;
 
 	r = kvm_x86_call(skip_emulated_instruction)(vcpu);
-	if (unlikely(!r))
-		return 0;
+	if (unlikely(r <= 0))
+		return r;
 
 	kvm_pmu_instruction_retired(vcpu);
 

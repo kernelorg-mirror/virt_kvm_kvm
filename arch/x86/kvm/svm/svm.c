@@ -304,6 +304,7 @@ static int __svm_skip_emulated_instruction(struct kvm_vcpu *vcpu,
 {
 	struct vcpu_svm *svm = to_svm(vcpu);
 	unsigned long old_rflags;
+	int r;
 
 	/*
 	 * SEV-ES does not expose the next RIP. The RIP update is controlled by
@@ -321,7 +322,10 @@ static int __svm_skip_emulated_instruction(struct kvm_vcpu *vcpu,
 		if (unlikely(!commit_side_effects))
 			old_rflags = svm->vmcb->save.rflags;
 
-		if (!kvm_emulate_instruction(vcpu, emul_type))
+		r = kvm_emulate_instruction(vcpu, emul_type);
+		if (r < 0)
+			kvm_vm_dead(vcpu->kvm);
+		if (r <= 0)
 			return 0;
 
 		if (unlikely(!commit_side_effects))
@@ -2128,7 +2132,8 @@ static int icebp_interception(struct kvm_vcpu *vcpu)
 	 * instead of after it (and SVM doesn't provide enough information for
 	 * KVM to detect and manually advance the pre-#DB RIP).
 	 */
-	svm_skip_emulated_instruction(vcpu);
+	if (!svm_skip_emulated_instruction(vcpu))
+		return 0;
 	kvm_queue_exception(vcpu, DB_VECTOR);
 	return 1;
 }
