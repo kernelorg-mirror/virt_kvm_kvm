@@ -861,10 +861,13 @@ static void nested_cache_shadow_vmcs12(struct kvm_vcpu *vcpu,
 	if (ghc->gpa != vmcs12->vmcs_link_pointer &&
 	    kvm_gfn_to_hva_cache_init(vcpu->kvm, ghc,
 				      vmcs12->vmcs_link_pointer, VMCS12_SIZE))
-		return;
+		goto error;
 
-	kvm_read_guest_cached(vcpu->kvm, ghc, get_shadow_vmcs12(vcpu),
-			      VMCS12_SIZE);
+	if (!kvm_read_guest_cached(vcpu->kvm, ghc, get_shadow_vmcs12(vcpu),
+				   VMCS12_SIZE))
+		return;
+error:
+	kvm_vm_dead(vcpu->kvm);
 }
 
 static void nested_flush_cached_shadow_vmcs12(struct kvm_vcpu *vcpu,
@@ -880,10 +883,13 @@ static void nested_flush_cached_shadow_vmcs12(struct kvm_vcpu *vcpu,
 	if (ghc->gpa != vmcs12->vmcs_link_pointer &&
 	    kvm_gfn_to_hva_cache_init(vcpu->kvm, ghc,
 				      vmcs12->vmcs_link_pointer, VMCS12_SIZE))
-		return;
+		goto error;
 
-	kvm_write_guest_cached(vcpu->kvm, ghc, get_shadow_vmcs12(vcpu),
-			       VMCS12_SIZE);
+	if (!kvm_write_guest_cached(vcpu->kvm, ghc, get_shadow_vmcs12(vcpu),
+				    VMCS12_SIZE))
+		return;
+error:
+	kvm_vm_dead(vcpu->kvm);
 }
 
 /*
@@ -5092,7 +5098,8 @@ void __nested_vmx_vmexit(struct kvm_vcpu *vcpu, u32 vm_exit_reason,
 		 * do that when something is forcing L2->L1 exit prior to
 		 * the first L2 run.
 		 */
-		(void)nested_get_evmcs_page(vcpu);
+		if (!nested_get_evmcs_page(vcpu))
+			kvm_vm_dead(vcpu->kvm);
 #endif
 	}
 

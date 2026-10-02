@@ -18,8 +18,13 @@ u64 nested_get_evmptr(struct kvm_vcpu *vcpu)
 {
 	struct kvm_vcpu_hv *hv_vcpu = to_hv_vcpu(vcpu);
 
-	if (unlikely(kvm_hv_get_assist_page(vcpu)))
+	if (unlikely(!kvm_hv_assist_page_enabled(vcpu)))
 		return EVMPTR_INVALID;
+
+	if (unlikely(kvm_hv_get_assist_page(vcpu))) {
+		kvm_vm_dead(vcpu->kvm);
+		return EVMPTR_INVALID;
+	}
 
 	if (unlikely(!hv_vcpu->vp_assist_page.enlighten_vmentry))
 		return EVMPTR_INVALID;
