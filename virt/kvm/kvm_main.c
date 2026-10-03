@@ -2490,10 +2490,12 @@ bool kvm_range_has_vm_memory_attributes(struct kvm *kvm, gfn_t start, gfn_t end,
 					unsigned long mask, unsigned long attrs)
 {
 	XA_STATE(xas, &kvm->mem_attr_array, start);
+	unsigned long supported_attrs;
 	unsigned long index;
 	void *entry;
 
-	mask &= kvm_supported_vm_mem_attributes(kvm);
+	supported_attrs = kvm_supported_vm_mem_attributes(kvm);
+	mask &= supported_attrs;
 	if (attrs & ~mask)
 		return false;
 
@@ -2522,8 +2524,10 @@ bool kvm_range_has_vm_memory_attributes(struct kvm *kvm, gfn_t start, gfn_t end,
 	 */
 	for (index = start; index < end; index++) {
 		do {
-			entry = attrs ? xas_next(&xas) :
-					xas_next_entry(&xas, end - 1);
+			if (!attrs && mask == supported_attrs)
+				entry = xas_next_entry(&xas, end - 1);
+			else
+				entry = xas_next(&xas);
 		} while (xas_retry(&xas, entry));
 
 		if (!entry)
