@@ -473,14 +473,6 @@ static inline void vm_enable_cap(struct kvm_vm *vm, u32 cap, u64 arg0)
 int kvm_gpa_to_guest_memfd(struct kvm_vm *vm, gpa_t gpa, off_t *fd_offset,
 			   size_t *nr_bytes);
 
-/*
- * KVM_SET_MEMORY_ATTRIBUTES{,2} overwrites _all_ attributes.  These
- * flows need significant enhancements to support multiple attributes.
- */
-#define TEST_ASSERT_SUPPORTED_ATTRIBUTES(attributes)				\
-	TEST_ASSERT(!(attributes) || (attributes) == KVM_MEMORY_ATTRIBUTE_PRIVATE,	\
-		    "Update me to support multiple attributes!")
-
 static inline void vm_set_memory_attributes(struct kvm_vm *vm, gpa_t gpa,
 					    size_t size, u64 attributes)
 {
@@ -490,8 +482,6 @@ static inline void vm_set_memory_attributes(struct kvm_vm *vm, gpa_t gpa,
 		.size = size,
 		.flags = 0,
 	};
-
-	TEST_ASSERT_SUPPORTED_ATTRIBUTES(attributes);
 
 	vm_ioctl(vm, KVM_SET_MEMORY_ATTRIBUTES, &attr);
 }
@@ -542,8 +532,6 @@ static inline void gmem_set_memory_attributes(int fd, u64 offset,
 		.size = size,
 		.flags = 0,
 	};
-
-	TEST_ASSERT_SUPPORTED_ATTRIBUTES(attributes);
 
 	__TEST_REQUIRE(kvm_check_cap(KVM_CAP_GUEST_MEMFD_MEMORY_ATTRIBUTES) > 0,
 		       "No valid attributes for guest_memfd ioctl!");
